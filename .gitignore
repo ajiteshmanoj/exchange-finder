@@ -6,6 +6,10 @@ config/.key
 outputs/
 test_outputs/
 
+# Runtime and cache files
+checkpoint.json
+data/
+
 # Python
 __pycache__/
 *.py[cod]
