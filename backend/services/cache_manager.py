@@ -253,3 +253,58 @@ class CacheManager:
             cache_file.unlink()
             count += 1
         return count
+
+    def get_countries_universities(self) -> Optional[Tuple[Dict[str, List[str]], str]]:
+        """
+        Get cached country-university mapping.
+
+        Cache TTL: 30 days (same as mappings, since this can change)
+
+        Returns:
+            Tuple of (countries_dict, cache_timestamp) if valid cache exists,
+            None otherwise
+        """
+        cache_file = self.cache_dir / "countries_universities.json"
+
+        if not self._is_cache_valid(cache_file, self.MAPPINGS_TTL):
+            return None
+
+        try:
+            with open(cache_file, 'r') as f:
+                cache_data = json.load(f)
+
+            return cache_data['data'], cache_data['cached_at']
+        except (json.JSONDecodeError, KeyError):
+            return None
+
+    def save_countries_universities(self, countries_universities: Dict[str, List[str]]) -> None:
+        """
+        Save country-university mapping to cache.
+
+        Args:
+            countries_universities: Dict mapping country -> list of universities
+        """
+        cache_file = self.cache_dir / "countries_universities.json"
+
+        cache_data = {
+            'cached_at': datetime.now().isoformat(),
+            'data': countries_universities,
+            'total_countries': len(countries_universities),
+            'total_universities': sum(len(unis) for unis in countries_universities.values())
+        }
+
+        with open(cache_file, 'w') as f:
+            json.dump(cache_data, f, indent=2)
+
+    def clear_countries_universities(self) -> bool:
+        """
+        Clear only countries/universities cache.
+
+        Returns:
+            True if cache was cleared, False if no cache existed
+        """
+        cache_file = self.cache_dir / "countries_universities.json"
+        if cache_file.exists():
+            cache_file.unlink()
+            return True
+        return False
