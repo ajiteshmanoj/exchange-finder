@@ -32,6 +32,38 @@ class NTUCredentials(BaseModel):
         }
 
 
+class LoginRequest(BaseModel):
+    """Request model for login verification"""
+    credentials: NTUCredentials
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "credentials": {
+                    "username": "AJITESH001",
+                    "password": "your_password",
+                    "domain": "Student"
+                }
+            }
+        }
+
+
+class LoginResponse(BaseModel):
+    """Response model for login verification"""
+    success: bool = Field(..., description="Whether login was successful")
+    message: str = Field(..., description="Login result message")
+    username: Optional[str] = Field(default=None, description="Authenticated username")
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "success": True,
+                "message": "Login successful",
+                "username": "AJITESH001"
+            }
+        }
+
+
 class SearchRequest(BaseModel):
     """Request model for university search endpoint"""
     credentials: NTUCredentials
@@ -212,5 +244,135 @@ class ErrorResponse(BaseModel):
                 "status": "error",
                 "error": "Authentication failed: Invalid credentials",
                 "details": "Login failed - check username and password"
+            }
+        }
+
+
+# ============= WEBSOCKET MESSAGE MODELS =============
+
+class ProgressMessage(BaseModel):
+    """WebSocket progress message for real-time updates"""
+    type: str = Field(default="progress", description="Message type")
+    step: int = Field(..., ge=1, le=3, description="Current pipeline step (1=PDF, 2=Scraping, 3=Processing)")
+    step_name: str = Field(..., description="Human-readable step name")
+    message: str = Field(..., description="Progress message")
+    details: Optional[Dict] = Field(default=None, description="Additional progress details")
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "type": "progress",
+                "step": 2,
+                "step_name": "Module Mapping Scraping",
+                "message": "Processing 5/45: University of Melbourne",
+                "details": {
+                    "current": 5,
+                    "total": 45,
+                    "university": "University of Melbourne",
+                    "country": "Australia",
+                    "found_modules": 3
+                }
+            }
+        }
+
+
+class CompleteMessage(BaseModel):
+    """WebSocket completion message with final results"""
+    type: str = Field(default="complete", description="Message type")
+    message: str = Field(..., description="Completion message")
+    execution_time: float = Field(..., description="Total execution time in seconds")
+    results_count: int = Field(..., description="Number of universities found")
+    results: List[UniversityResult] = Field(..., description="List of university results")
+    cache_used: bool = Field(..., description="Whether cached data was used")
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "type": "complete",
+                "message": "Found 25 universities matching criteria",
+                "execution_time": 1234.5,
+                "results_count": 25,
+                "results": [],
+                "cache_used": False
+            }
+        }
+
+
+class ErrorMessage(BaseModel):
+    """WebSocket error message"""
+    type: str = Field(default="error", description="Message type")
+    error: str = Field(..., description="Error message")
+    details: Optional[str] = Field(default=None, description="Additional error details")
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "type": "error",
+                "error": "Login failed - Invalid credentials",
+                "details": "Please check your username and password"
+            }
+        }
+
+
+class CountryUniversity(BaseModel):
+    """Single country with its universities"""
+    country: str = Field(..., description="Country name")
+    universities: List[str] = Field(..., description="List of university names")
+    university_count: int = Field(..., description="Number of universities in this country")
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "country": "Australia",
+                "universities": ["University of Melbourne", "University of Sydney"],
+                "university_count": 45
+            }
+        }
+
+
+class CountriesUniversitiesResponse(BaseModel):
+    """Response for countries-universities endpoint"""
+    status: str = Field(default="success", description="Response status")
+    message: str = Field(..., description="Human-readable message")
+    cache_used: bool = Field(..., description="Whether cached data was used")
+    cache_timestamp: Optional[str] = Field(default=None, description="Cache timestamp")
+    total_countries: int = Field(..., description="Total number of countries")
+    total_universities: int = Field(..., description="Total number of universities")
+    countries: List[CountryUniversity] = Field(..., description="List of countries with universities")
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "status": "success",
+                "message": "Retrieved 85 countries with 1234 universities",
+                "cache_used": True,
+                "cache_timestamp": "2025-12-25T10:30:00",
+                "total_countries": 85,
+                "total_universities": 1234,
+                "countries": [
+                    {
+                        "country": "Australia",
+                        "universities": ["University of Melbourne"],
+                        "university_count": 45
+                    }
+                ]
+            }
+        }
+
+
+class CountriesUniversitiesRequest(BaseModel):
+    """Request for countries-universities endpoint"""
+    credentials: NTUCredentials
+    use_cache: bool = Field(default=True, description="Whether to use cached data")
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "credentials": {
+                    "username": "AJITESH001",
+                    "password": "your_password",
+                    "domain": "Student"
+                },
+                "use_cache": True
             }
         }

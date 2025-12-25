@@ -143,7 +143,10 @@ class PDFExtractor:
 
     def filter_target_universities(self, df: pd.DataFrame, config: Dict) -> Dict:
         """
-        Filter universities by target countries, college acceptance, and sem1 availability.
+        Filter universities by college acceptance and sem1 availability.
+
+        NOTE: Country filtering has been REMOVED - we now extract ALL countries.
+        The PDF is used only for metadata (spots, CGPA, remarks).
 
         Args:
             df: DataFrame with all universities
@@ -152,15 +155,13 @@ class PDFExtractor:
         Returns:
             Dictionary of filtered universities with university_code as key
         """
-        target_countries = config['target_countries']
         student_college = config['student_college']
 
-        print(f"\n  Filtering universities...")
+        print(f"\n  Extracting universities from PDF (metadata only)...")
         print(f"    Initial count: {len(df)}")
 
-        # Filter by target countries
-        df_filtered = df[df['country'].isin(target_countries)].copy()
-        print(f"    After country filter ({', '.join(target_countries)}): {len(df_filtered)}")
+        # NO LONGER FILTER BY COUNTRY - we want all countries now
+        df_filtered = df.copy()
 
         # Filter by CCDS acceptance (check if 'CCDS' or 'All' is in status_for column)
         df_filtered = df_filtered[
@@ -195,11 +196,13 @@ class PDFExtractor:
 
         print(f"  ✓ Final filtered count: {len(universities)} universities\n")
 
-        # Show breakdown by country
+        # Show breakdown by country (showing ALL countries, not just selected ones)
         country_counts = df_filtered['country'].value_counts()
-        print("  Breakdown by country:")
-        for country, count in country_counts.items():
+        print(f"  Breakdown by country ({len(country_counts)} countries):")
+        for country, count in country_counts.head(10).items():
             print(f"    {country}: {count}")
+        if len(country_counts) > 10:
+            print(f"    ... and {len(country_counts) - 10} more countries")
 
         return universities
 

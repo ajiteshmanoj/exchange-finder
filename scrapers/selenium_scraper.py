@@ -229,7 +229,38 @@ class SeleniumNTUScraper:
                                 password_field.send_keys("\n")
 
                         print("    Submitting password...")
-                        time.sleep(5)
+
+                        # Wait for redirect with retries (up to 30 seconds)
+                        for wait_count in range(6):
+                            time.sleep(5)
+
+                            # Check for "Stay signed in?" or "Don't show again" dialogs
+                            try:
+                                stay_signed_in = self.driver.find_elements(By.ID, "idBtn_Back")
+                                if stay_signed_in:
+                                    stay_signed_in[0].click()
+                                    print("      Clicked 'No' on stay signed in")
+                                    time.sleep(2)
+                            except:
+                                pass
+
+                            try:
+                                dont_show = self.driver.find_elements(By.ID, "idSIButton9")
+                                if dont_show:
+                                    dont_show[0].click()
+                                    print("      Clicked 'Yes' on stay signed in")
+                                    time.sleep(2)
+                            except:
+                                pass
+
+                            current_url = self.driver.current_url
+                            # Check if we've left the SSO page
+                            if 'instep' in current_url.lower() or 'show_rec' in current_url.lower() or 'blank.htm' in current_url.lower():
+                                break
+                            if 'sso' not in current_url.lower():
+                                break
+                            if wait_count < 5:
+                                print(f"      Waiting for redirect... ({(wait_count+1)*5}s)")
                     else:
                         print("    ⚠️  No password field found, checking if already logged in...")
 
@@ -312,12 +343,31 @@ class SeleniumNTUScraper:
                     print("  ✗ Login failed - still on SSO page")
                     print(f"    Current URL: {current_url}")
 
-                    # Check for error messages
+                    # Check for error messages on NTU SSO page
                     try:
-                        error_elements = self.driver.find_elements(By.CSS_SELECTOR, ".error, .alert, [class*='error']")
+                        # NTU-specific error messages
+                        page_source = self.driver.page_source.lower()
+                        if 'invalid' in page_source:
+                            print("    Error: Invalid credentials")
+                        if 'incorrect' in page_source:
+                            print("    Error: Incorrect username or password")
+                        if 'locked' in page_source:
+                            print("    Error: Account may be locked")
+
+                        # Try to find any visible text that might be an error
+                        body = self.driver.find_element(By.TAG_NAME, "body")
+                        visible_text = body.text[:500] if body.text else ""
+                        if visible_text:
+                            print(f"    Page content: {visible_text[:200]}...")
+                    except Exception as e:
+                        print(f"    Could not read page: {e}")
+
+                    # Check for generic error elements
+                    try:
+                        error_elements = self.driver.find_elements(By.CSS_SELECTOR, ".error, .alert, [class*='error'], font[color='red']")
                         for elem in error_elements:
                             if elem.text.strip():
-                                print(f"    Error: {elem.text.strip()}")
+                                print(f"    Error element: {elem.text.strip()}")
                     except:
                         pass
 
@@ -361,18 +411,42 @@ class SeleniumNTUScraper:
         if not self._authenticated:
             return self.login()
 
+        # Don't aggressively check URL - just return True if we think we're authenticated
+        # We'll handle actual session expiry when it happens during operations
+        return True
+
+    def _ensure_on_search_page(self) -> bool:
+        """Navigate to search page if needed, re-login if session expired."""
         try:
-            # Check current URL
             current_url = self.driver.current_url
 
-            if 'sso' in current_url.lower() or 'login' in current_url.lower():
+            # If we're already on the search page, we're good
+            if 'instep' in current_url.lower() or 'show_rec' in current_url.lower():
+                return True
+
+            # If we're on SSO page, we need to re-login
+            if 'sso' in current_url.lower():
                 print("\n  ⚠️  Session expired, re-logging in...")
                 self._authenticated = False
                 return self.login()
 
+            # Otherwise, navigate to search page
+            student_id = self.config.get('ntu_sso', {}).get('student_id', self.username)
+            search_url = f"https://wis.ntu.edu.sg/pls/lms/instep_past_subj_matching.show_rec_INSTEP?p1={student_id}&p2="
+            self.driver.get(search_url)
+            time.sleep(2)
+
+            # Dismiss any alert
+            try:
+                alert = self.driver.switch_to.alert
+                alert.accept()
+            except:
+                pass
+
             return True
 
-        except Exception:
+        except Exception as e:
+            print(f"  ⚠️  Error ensuring search page: {e}")
             return False
 
     def search_university_mappings(self, university_name: str, country: str) -> Dict[str, List[Dict]]:
@@ -516,6 +590,94 @@ class SeleniumNTUScraper:
         except Exception as e:
             print(f"      Warning: Search failed for {university_name}: {e}")
             return {}
+
+    def scrape_countries_and_universities(self) -> Dict[str, List[str]]:
+        """
+        Scrape ALL countries and universities from NTU dropdown.
+
+        Target URL: https://wis.ntu.edu.sg/pls/lms/instep_past_subj_matching.show_rec2
+
+        Returns:
+            Dictionary mapping country_name -> list of university_names
+            Example: {
+                "Australia": ["University of Melbourne", "University of Sydney", ...],
+                "Denmark": ["University of Copenhagen", "Aarhus University", ...],
+                ...
+            }
+        """
+        if not self._check_session():
+            raise RuntimeError("Session invalid - cannot scrape countries")
+
+        try:
+            # Navigate to search page with student ID
+            student_id = self.config.get('ntu_sso', {}).get('student_id', self.username)
+            instep_url = f"https://wis.ntu.edu.sg/pls/lms/instep_past_subj_matching.show_rec_INSTEP?p1={student_id}&p2="
+
+            self.driver.get(instep_url)
+            time.sleep(2)
+
+            # Dismiss any alert
+            try:
+                alert = self.driver.switch_to.alert
+                alert.accept()
+            except:
+                pass
+
+            wait = WebDriverWait(self.driver, 10)
+
+            # Find country dropdown and extract values FIRST (before any selections)
+            # This avoids stale element references
+            country_select = Select(wait.until(
+                EC.presence_of_element_located((By.NAME, "which_cty"))
+            ))
+
+            # Extract all country values and texts into a list (not element references)
+            country_data = []
+            for option in country_select.options[1:]:  # Skip first placeholder
+                value = option.get_attribute('value')
+                text = option.text.strip()
+                if value and value != "":
+                    country_data.append((value, text))
+
+            countries_universities = {}
+
+            print(f"\n  Scraping countries and universities from NTU dropdown...")
+            print(f"  Found {len(country_data)} countries")
+
+            for country_value, country_text in tqdm(country_data, desc="  Processing countries", unit="country"):
+                try:
+                    # Re-find the dropdown element each time (avoids stale reference)
+                    country_select = Select(self.driver.find_element(By.NAME, "which_cty"))
+                    country_select.select_by_value(country_value)
+                    time.sleep(1.5)  # Wait for university dropdown to update
+
+                    # Get university dropdown (name="which_uni_val")
+                    uni_select = Select(self.driver.find_element(By.NAME, "which_uni_val"))
+
+                    # Extract universities (skip first placeholder option)
+                    universities = []
+                    for uni_option in uni_select.options[1:]:
+                        uni_text = uni_option.text.strip()
+                        if uni_text:
+                            universities.append(uni_text)
+
+                    countries_universities[country_text] = universities
+
+                except Exception as e:
+                    print(f"\n    Warning: Failed to get universities for {country_text}: {e}")
+                    countries_universities[country_text] = []
+
+                # Rate limiting
+                time.sleep(random.uniform(0.5, 1.0))
+
+            print(f"\n  ✓ Scraped {len(countries_universities)} countries")
+            print(f"  ✓ Total universities: {sum(len(unis) for unis in countries_universities.values())}")
+
+            return countries_universities
+
+        except Exception as e:
+            print(f"  ✗ Failed to scrape countries/universities: {e}")
+            raise RuntimeError(f"Country/university scraping failed: {e}")
 
     def search_module_mapping(self, ntu_module: str, university_name: str, country: str = None) -> List[Dict]:
         """

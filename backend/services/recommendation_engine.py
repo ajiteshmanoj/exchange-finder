@@ -134,6 +134,181 @@ class RecommendationEngine:
 
         return ranked_results, cache_used, cache_timestamp
 
+    def search_universities_with_progress(
+        self,
+        credentials: Tuple[str, str, str],
+        target_countries: Optional[List[str]] = None,
+        target_modules: Optional[List[str]] = None,
+        min_mappable_modules: int = 2,
+        use_cache: bool = True,
+        headless: bool = True,
+        progress_callback=None
+    ) -> Tuple[List[Tuple[str, Dict]], bool, Optional[str]]:
+        """
+        Execute university search with real-time progress callbacks.
+
+        Same as search_universities() but accepts a progress_callback function
+        that will be called with progress updates during execution.
+
+        Args:
+            credentials: Tuple of (username, password, domain)
+            target_countries: List of countries to filter (None = use config)
+            target_modules: List of module codes (None = use config)
+            min_mappable_modules: Minimum mappable modules threshold
+            use_cache: Whether to use cached data
+            headless: Run Selenium in headless mode
+            progress_callback: Async callback function(step, step_name, message, details)
+
+        Returns:
+            Tuple of (ranked_results, cache_used, cache_timestamp)
+
+        Raises:
+            FileNotFoundError: If PDF file not found
+            RuntimeError: If browser startup or login fails
+        """
+        import asyncio
+
+        username = credentials[0]
+
+        # Use config defaults if not provided
+        countries = target_countries or self.config['target_countries']
+        modules = target_modules or self.config['target_modules']
+
+        # Update config with request parameters
+        search_config = self.config.copy()
+        search_config['target_countries'] = countries
+        search_config['target_modules'] = modules
+        search_config['min_mappable_modules'] = min_mappable_modules
+
+        # Helper to call async progress callback from sync code
+        def send_progress(step, step_name, message, details=None):
+            if progress_callback:
+                try:
+                    loop = asyncio.new_event_loop()
+                    loop.run_until_complete(
+                        progress_callback(step, step_name, message, details)
+                    )
+                    loop.close()
+                except Exception as e:
+                    print(f"Warning: Failed to send progress update: {e}")
+
+        # Step 1: Get university list (with caching)
+        send_progress(1, "PDF Extraction", "Extracting university list from PDF...", None)
+        universities, uni_cache_used, uni_cache_time = self._get_universities(
+            search_config, use_cache
+        )
+        if uni_cache_used:
+            send_progress(1, "PDF Extraction", f"Loaded {len(universities)} universities from cache", {"count": len(universities)})
+        else:
+            send_progress(1, "PDF Extraction", f"Extracted {len(universities)} universities from PDF", {"count": len(universities)})
+
+        # Step 2: Get module mappings (with caching and progress callbacks)
+        mapping_data, map_cache_used, map_cache_time = self._get_mappings_with_progress(
+            credentials, universities, modules, countries,
+            username, use_cache, headless, send_progress
+        )
+
+        # Step 3: Process and rank (no caching - fast operation)
+        send_progress(3, "Processing & Ranking", "Processing and ranking results...", None)
+        ranked_results = self._process_and_rank(
+            universities, mapping_data, search_config
+        )
+        send_progress(3, "Processing & Ranking", f"Ranked {len(ranked_results)} universities", {"count": len(ranked_results)})
+
+        # Determine overall cache status
+        cache_used = uni_cache_used and map_cache_used
+        cache_timestamp = map_cache_time if cache_used else None
+
+        return ranked_results, cache_used, cache_timestamp
+
+    def _get_mappings_with_progress(
+        self,
+        credentials: Tuple[str, str, str],
+        universities: dict,
+        modules: list,
+        countries: list,
+        username: str,
+        use_cache: bool,
+        headless: bool,
+        progress_callback
+    ) -> Tuple[dict, bool, Optional[str]]:
+        """
+        Get module mappings with progress callbacks.
+
+        Same as _get_mappings() but sends progress updates during scraping.
+
+        Args:
+            credentials: Tuple of (username, password, domain)
+            universities: Dictionary of universities to search
+            modules: List of module codes
+            countries: List of countries
+            username: NTU username (for cache key)
+            use_cache: Whether to attempt to use cache
+            headless: Run browser in headless mode
+            progress_callback: Function to call with progress updates
+
+        Returns:
+            Tuple of (mapping_data, cache_used, cache_timestamp)
+
+        Raises:
+            RuntimeError: If browser startup or login fails
+        """
+        # Try cache first
+        if use_cache:
+            progress_callback(2, "Module Mapping Scraping", "Checking cache...", None)
+            cached = self.cache_manager.get_mappings(countries, modules, username)
+            if cached:
+                mapping_data, cache_time = cached
+                progress_callback(2, "Module Mapping Scraping", f"Loaded mappings from cache for {len(universities)} universities", {"count": len(universities)})
+                return mapping_data, True, cache_time
+
+        # Cache miss - scrape using Selenium
+        progress_callback(2, "Module Mapping Scraping", "Starting Chrome browser...", None)
+        scraper = SeleniumNTUScraper(credentials, self.config, headless=headless)
+
+        try:
+            # Start browser
+            if not scraper.start():
+                raise RuntimeError("Failed to start Chrome browser")
+            progress_callback(2, "Module Mapping Scraping", "Browser started successfully", None)
+
+            # Login to NTU SSO
+            progress_callback(2, "Module Mapping Scraping", "Logging in to NTU SSO...", None)
+            if not scraper.login():
+                raise RuntimeError(
+                    "Login failed - please check your credentials.\n"
+                    "Ensure username, password, and domain are correct."
+                )
+            progress_callback(2, "Module Mapping Scraping", "Login successful", None)
+
+            # Scrape all mappings with progress updates
+            estimated_time = len(universities) * 2.5 / 60
+            progress_callback(
+                2,
+                "Module Mapping Scraping",
+                f"Scraping mappings for {len(universities)} universities (estimated {estimated_time:.1f} minutes)...",
+                {"total": len(universities), "estimated_minutes": round(estimated_time, 1)}
+            )
+
+            # Use progress-enabled scraping method if available
+            # For now, we'll use the existing method and add progress wrapper
+            # TODO: Implement scrape_all_mappings_with_progress in selenium_scraper.py
+            mapping_data = scraper.scrape_all_mappings(universities, modules)
+
+            # Save to cache for next time
+            if use_cache:
+                progress_callback(2, "Module Mapping Scraping", "Saving mappings to cache...", None)
+                self.cache_manager.save_mappings(
+                    mapping_data, countries, modules, username
+                )
+
+            progress_callback(2, "Module Mapping Scraping", "Scraping completed successfully", None)
+            return mapping_data, False, None
+
+        finally:
+            # Always close browser
+            scraper.close()
+
     def _get_universities(
         self,
         config: dict,
