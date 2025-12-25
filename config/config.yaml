@@ -1,0 +1,46 @@
+# Exchange University Scraper Configuration
+
+target_countries:
+  - Australia
+  - Denmark
+  - Finland
+  - Ireland
+  - Netherlands
+  - Norway
+  - Sweden
+
+target_modules:
+  - SC4001  # Neural Networks & Deep Learning
+  - SC4002  # Natural Language Processing
+  - SC4062  # Generative AI - Advanced Topics
+  - SC4021  # Information Retrieval
+  - SC4023  # Big Data Management
+  - SC4003  # Intelligent Agents
+
+student_college: CCDS
+min_mappable_modules: 2
+semester_column: "AY 25/26 GEM EX SEM 1"
+
+# Rate limiting for web scraping (seconds)
+rate_limiting:
+  delay_min: 2.0
+  delay_max: 3.0
+
+# NTU SSO and module mapping URLs
+ntu_sso:
+  login_url: "https://sso.wis.ntu.edu.sg/webexe88/owa/sso_login1.asp?t=1&p2=https://wis.ntu.edu.sg/pls/lms/instep_past_subj_matching.show_rec_INSTEP"
+  module_search_url: "https://wis.ntu.edu.sg/pls/lms/instep_past_subj_matching.show_rec2"
+  student_id: "U2422324K"  # Your matriculation number (different from network username)
+
+# PDF file path (relative to project root)
+pdf_file: "210125_GEM_Explorer_Vacancy_List_for_AY2526_Full_Year_Recruitment.pdf"
+
+# Output paths
+outputs:
+  csv: "outputs/exchange_universities_analysis.csv"
+  markdown: "outputs/exchange_universities_report.md"
+
+# Approved module mapping years
+approved_years:
+  - "2024"
+  - "2025"
