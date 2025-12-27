@@ -5,8 +5,16 @@
 
 import React, { useState } from 'react';
 
-const UniversityCard = ({ university }) => {
+const UniversityCard = ({ university, selectedSemester = null }) => {
   const [showDetails, setShowDetails] = useState(false);
+
+  // Determine which spots to show based on selected semester
+  const showBothSemesters = selectedSemester === null;
+  const showSem1 = selectedSemester === null || selectedSemester === 1;
+  const showSem2 = selectedSemester === null || selectedSemester === 2;
+
+  // Calculate grid columns based on what's shown
+  const gridCols = showBothSemesters ? 'grid-cols-2 md:grid-cols-5' : 'grid-cols-2 md:grid-cols-4';
 
   return (
     <div className="bg-white rounded-lg shadow-md hover:shadow-lg transition-shadow duration-200 overflow-hidden">
@@ -35,22 +43,35 @@ const UniversityCard = ({ university }) => {
       </div>
 
       {/* Stats Grid */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 p-6 bg-gray-50">
-        <div>
-          <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">
-            Sem 1 Spots
+      <div className={`grid ${gridCols} gap-4 p-6 bg-gray-50`}>
+        {showSem1 && (
+          <div>
+            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">
+              Sem 1 Spots
+            </div>
+            <div className={`text-2xl font-bold ${university.sem1_spots > 0 ? 'text-green-600' : 'text-gray-400'}`}>
+              {university.sem1_spots}
+            </div>
           </div>
-          <div className="text-2xl font-bold text-gray-800">
-            {university.sem1_spots}
+        )}
+
+        {showSem2 && (
+          <div>
+            <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">
+              Sem 2 Spots
+            </div>
+            <div className={`text-2xl font-bold ${university.sem2_spots > 0 ? 'text-green-600' : 'text-gray-400'}`}>
+              {university.sem2_spots || 0}
+            </div>
           </div>
-        </div>
+        )}
 
         <div>
           <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">
             Min CGPA
           </div>
           <div className="text-2xl font-bold text-gray-800">
-            {university.min_cgpa.toFixed(2)}
+            {university.min_cgpa > 0 ? university.min_cgpa.toFixed(2) : '-'}
           </div>
         </div>
 

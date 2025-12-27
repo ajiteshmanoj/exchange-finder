@@ -322,8 +322,15 @@ async def search_database(request: DatabaseSearchRequest):
             # Get spots and CGPA from PDF data
             pdf_data = pdf_service.get_university_data(university, country)
             sem1_spots = pdf_data.get('sem1_spots', 0)
+            sem2_spots = pdf_data.get('sem2_spots', 0)
             min_cgpa = pdf_data.get('min_cgpa', 0.0)
             remarks = pdf_data.get('remarks', '')
+
+            # Filter by semester if specified
+            if request.target_semester == 1 and sem1_spots == 0:
+                continue  # Skip universities with no Sem 1 spots
+            elif request.target_semester == 2 and sem2_spots == 0:
+                continue  # Skip universities with no Sem 2 spots
 
             results.append(UniversityResult(
                 rank=rank,
@@ -331,6 +338,7 @@ async def search_database(request: DatabaseSearchRequest):
                 country=country,
                 university_code=uni_key,
                 sem1_spots=sem1_spots,
+                sem2_spots=sem2_spots,
                 min_cgpa=min_cgpa,
                 mappable_count=mappable_count,
                 coverage_score=(mappable_count / len(request.target_modules)) * 100,
@@ -340,8 +348,13 @@ async def search_database(request: DatabaseSearchRequest):
             ))
             rank += 1
 
-        # Sort by: mappable_count (desc), sem1_spots (desc), min_cgpa (asc), country, name
-        results.sort(key=lambda x: (-x.mappable_count, -x.sem1_spots, x.min_cgpa, x.country, x.name))
+        # Sort based on selected semester
+        if request.target_semester == 2:
+            # Sort by: mappable_count (desc), sem2_spots (desc), min_cgpa (asc), country, name
+            results.sort(key=lambda x: (-x.mappable_count, -x.sem2_spots, x.min_cgpa, x.country, x.name))
+        else:
+            # Default: Sort by sem1_spots (or both if no semester selected)
+            results.sort(key=lambda x: (-x.mappable_count, -x.sem1_spots, x.min_cgpa, x.country, x.name))
 
         # Re-assign ranks after sorting
         for i, result in enumerate(results):

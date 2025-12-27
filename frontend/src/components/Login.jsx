@@ -110,7 +110,7 @@ const Login = ({ onLogin }) => {
                 className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-ntu-blue focus:border-transparent ${
                   errors.username ? 'border-red-500' : 'border-gray-300'
                 } ${isLoading ? 'bg-gray-100' : ''}`}
-                placeholder="e.g., AJITESH001"
+                placeholder="e.g., JOHNSMITH001"
               />
               {errors.username && (
                 <p className="text-red-500 text-sm mt-1">{errors.username}</p>
@@ -190,20 +190,9 @@ const Login = ({ onLogin }) => {
           {/* Loading Info */}
           {isLoading && (
             <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-              <div className="text-sm text-gray-600 space-y-1">
-                <p className="font-medium text-gray-800">Authenticating with NTU SSO...</p>
-                <ul className="list-disc list-inside text-gray-500 text-xs">
-                  <li>Starting secure browser session</li>
-                  <li>Logging into NTU SSO</li>
-                  <li>Fetching all exchange countries (first time only)</li>
-                </ul>
-                <p className="text-xs text-gray-500 mt-2">
-                  First login: 1-2 minutes (fetching countries)
-                </p>
-                <p className="text-xs text-green-600">
-                  Next logins: 10-30 seconds (countries cached)
-                </p>
-              </div>
+              <p className="text-sm text-gray-700 text-center">
+                Verifying with NTU...
+              </p>
             </div>
           )}
 

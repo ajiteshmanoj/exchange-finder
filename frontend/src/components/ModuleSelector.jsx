@@ -1,18 +1,15 @@
 /**
  * ModuleSelector Component
  * Dynamic input for adding custom NTU modules
- * Users can add/remove modules with code and name
  */
 
 import React, { useState } from 'react';
 
 const ModuleSelector = ({ selectedModules, onChange }) => {
   const [moduleCode, setModuleCode] = useState('');
-  const [moduleName, setModuleName] = useState('');
 
   const handleAddModule = () => {
     const code = moduleCode.trim().toUpperCase();
-    const name = moduleName.trim();
 
     if (!code) {
       alert('Please enter a module code');
@@ -26,11 +23,10 @@ const ModuleSelector = ({ selectedModules, onChange }) => {
     }
 
     // Add module to list
-    onChange([...selectedModules, { code, name: name || code }]);
+    onChange([...selectedModules, { code, name: code }]);
 
-    // Clear inputs
+    // Clear input
     setModuleCode('');
-    setModuleName('');
   };
 
   const handleRemoveModule = (code) => {
@@ -56,12 +52,12 @@ const ModuleSelector = ({ selectedModules, onChange }) => {
         </h3>
       </div>
 
-      {/* Input Fields */}
+      {/* Input Field */}
       <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 space-y-3">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          <div>
+        <div className="flex gap-3">
+          <div className="flex-1">
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Module Code *
+              Module Code
             </label>
             <input
               type="text"
@@ -69,30 +65,22 @@ const ModuleSelector = ({ selectedModules, onChange }) => {
               onChange={(e) => setModuleCode(e.target.value)}
               onKeyPress={handleKeyPress}
               placeholder="e.g., SC4001"
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-ntu-blue focus:border-transparent"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             />
           </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Module Name (optional)
-            </label>
-            <input
-              type="text"
-              value={moduleName}
-              onChange={(e) => setModuleName(e.target.value)}
-              onKeyPress={handleKeyPress}
-              placeholder="e.g., Neural Networks & Deep Learning"
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-ntu-blue focus:border-transparent"
-            />
+          <div className="flex items-end">
+            <button
+              type="button"
+              onClick={handleAddModule}
+              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors"
+            >
+              + Add
+            </button>
           </div>
         </div>
-        <button
-          type="button"
-          onClick={handleAddModule}
-          className="w-full md:w-auto px-4 py-2 bg-ntu-blue hover:bg-ntu-blue-light text-white font-medium rounded-lg transition-colors"
-        >
-          + Add Module
-        </button>
+        <p className="text-xs text-gray-500">
+          Enter module code and press Enter or click Add
+        </p>
       </div>
 
       {/* Added Modules List */}

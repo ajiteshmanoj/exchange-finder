@@ -4,6 +4,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
+import Select from 'react-select';
 import { api } from '../services/api';
 import { DEFAULT_MIN_MAPPABLE_MODULES } from '../utils/constants';
 import ModuleSelector from './ModuleSelector';
@@ -13,6 +14,7 @@ const Search = ({ credentials }) => {
   // Form state
   const [selectedCountries, setSelectedCountries] = useState([]);
   const [selectedModules, setSelectedModules] = useState([]);
+  const [selectedSemester, setSelectedSemester] = useState(null); // null = both, 1 = Sem 1, 2 = Sem 2
   const [minMappableModules, setMinMappableModules] = useState(DEFAULT_MIN_MAPPABLE_MODULES);
 
   // Search state
@@ -60,6 +62,7 @@ const Search = ({ credentials }) => {
       const response = await api.searchDatabase(
         selectedModules.map(m => m.code),
         selectedCountries.length > 0 ? selectedCountries : null,
+        selectedSemester,
         minMappableModules
       );
 
@@ -112,7 +115,7 @@ const Search = ({ credentials }) => {
             </div>
           )}
 
-          {/* Country Selector - Simple multi-select from database */}
+          {/* Country Selector - Searchable multi-select dropdown */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Filter by Countries (optional)
@@ -120,23 +123,90 @@ const Search = ({ credentials }) => {
             {loadingCountries ? (
               <div className="text-gray-500">Loading countries...</div>
             ) : (
-              <select
-                multiple
-                value={selectedCountries}
-                onChange={(e) => {
-                  const values = Array.from(e.target.selectedOptions, option => option.value);
-                  setSelectedCountries(values);
+              <Select
+                isMulti
+                options={availableCountries.map(country => ({ value: country, label: country }))}
+                value={selectedCountries.map(country => ({ value: country, label: country }))}
+                onChange={(selected) => {
+                  setSelectedCountries(selected ? selected.map(s => s.value) : []);
                 }}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                style={{ minHeight: '120px' }}
-              >
-                {availableCountries.map(country => (
-                  <option key={country} value={country}>{country}</option>
-                ))}
-              </select>
+                placeholder="Type to search and select countries..."
+                noOptionsMessage={() => "No countries found"}
+                className="react-select-container"
+                classNamePrefix="react-select"
+                styles={{
+                  control: (base) => ({
+                    ...base,
+                    borderColor: '#d1d5db',
+                    '&:hover': { borderColor: '#3b82f6' },
+                    boxShadow: 'none',
+                  }),
+                  multiValue: (base) => ({
+                    ...base,
+                    backgroundColor: '#dbeafe',
+                  }),
+                  multiValueLabel: (base) => ({
+                    ...base,
+                    color: '#1e40af',
+                  }),
+                  multiValueRemove: (base) => ({
+                    ...base,
+                    color: '#1e40af',
+                    '&:hover': { backgroundColor: '#bfdbfe', color: '#1e3a8a' },
+                  }),
+                }}
+              />
             )}
             <p className="text-xs text-gray-500 mt-1">
-              Hold Ctrl/Cmd to select multiple. Leave empty to search all countries.
+              Type to search. Leave empty to search all countries.
+            </p>
+          </div>
+
+          {/* Semester Selector */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Target Semester
+            </label>
+            <div className="flex gap-4">
+              <label className={`flex items-center px-4 py-3 border rounded-lg cursor-pointer transition-colors ${
+                selectedSemester === null ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-gray-300 hover:bg-gray-50'
+              }`}>
+                <input
+                  type="radio"
+                  name="semester"
+                  checked={selectedSemester === null}
+                  onChange={() => setSelectedSemester(null)}
+                  className="w-4 h-4 text-blue-600"
+                />
+                <span className="ml-2">Both Semesters</span>
+              </label>
+              <label className={`flex items-center px-4 py-3 border rounded-lg cursor-pointer transition-colors ${
+                selectedSemester === 1 ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-gray-300 hover:bg-gray-50'
+              }`}>
+                <input
+                  type="radio"
+                  name="semester"
+                  checked={selectedSemester === 1}
+                  onChange={() => setSelectedSemester(1)}
+                  className="w-4 h-4 text-blue-600"
+                />
+                <span className="ml-2">Semester 1</span>
+              </label>
+              <label className={`flex items-center px-4 py-3 border rounded-lg cursor-pointer transition-colors ${
+                selectedSemester === 2 ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-gray-300 hover:bg-gray-50'
+              }`}>
+                <input
+                  type="radio"
+                  name="semester"
+                  checked={selectedSemester === 2}
+                  onChange={() => setSelectedSemester(2)}
+                  className="w-4 h-4 text-blue-600"
+                />
+                <span className="ml-2">Semester 2</span>
+              </label>
+            </div>
+            <p className="text-xs text-gray-500 mt-1">
+              Filter universities by available spots in selected semester
             </p>
           </div>
 
@@ -231,7 +301,7 @@ const Search = ({ credentials }) => {
           {/* University Cards */}
           <div className="space-y-4">
             {results.map((university) => (
-              <UniversityCard key={university.rank} university={university} />
+              <UniversityCard key={university.rank} university={university} selectedSemester={selectedSemester} />
             ))}
           </div>
 
