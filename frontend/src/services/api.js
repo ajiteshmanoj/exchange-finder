@@ -85,6 +85,114 @@ export const api = {
       timeout: 600000 // 10 minutes
     });
     return response.data;
+  },
+
+  // ============= Admin Endpoints =============
+
+  /**
+   * Get database status
+   * @returns {Promise} Database statistics
+   */
+  getDatabaseStatus: async () => {
+    const response = await apiClient.get('/api/admin/database/status');
+    return response.data;
+  },
+
+  /**
+   * Start full database scrape
+   * @param {Object} credentials - NTU credentials
+   * @param {Boolean} headless - Run browser in headless mode
+   * @returns {Promise} Scrape job info
+   */
+  startScrape: async (credentials, headless = true) => {
+    const response = await apiClient.post('/api/admin/scrape', {
+      credentials,
+      headless
+    });
+    return response.data;
+  },
+
+  /**
+   * Get scrape job status
+   * @param {Number} jobId - Scrape job ID
+   * @returns {Promise} Job status
+   */
+  getScrapeStatus: async (jobId) => {
+    const response = await apiClient.get(`/api/admin/scrape/status/${jobId}`);
+    return response.data;
+  },
+
+  /**
+   * Get latest scrape job
+   * @returns {Promise} Latest job status
+   */
+  getLatestScrape: async () => {
+    const response = await apiClient.get('/api/admin/scrape/latest');
+    return response.data;
+  },
+
+  /**
+   * Cancel a running scrape job
+   * @param {Number} jobId - Scrape job ID
+   * @returns {Promise} Cancellation result
+   */
+  cancelScrape: async (jobId) => {
+    const response = await apiClient.delete(`/api/admin/scrape/${jobId}`);
+    return response.data;
+  },
+
+  /**
+   * Force cancel all stale scrape jobs
+   * Use when jobs are stuck after server restart
+   * @returns {Promise} Force cancellation result
+   */
+  forceCancelScrape: async () => {
+    const response = await apiClient.post('/api/admin/scrape/force-cancel');
+    return response.data;
+  },
+
+  /**
+   * Search pre-scraped database (instant, no credentials)
+   * @param {Array} targetModules - List of NTU module codes
+   * @param {Array} targetCountries - Optional list of countries
+   * @param {Number} minMappableModules - Minimum mappable modules
+   * @returns {Promise} Search results
+   */
+  searchDatabase: async (targetModules, targetCountries = null, minMappableModules = 1) => {
+    const response = await apiClient.post('/api/search/db', {
+      target_modules: targetModules,
+      target_countries: targetCountries,
+      min_mappable_modules: minMappableModules
+    });
+    return response.data;
+  },
+
+  /**
+   * Get available modules in database
+   * @returns {Promise} List of module codes
+   */
+  getAvailableModules: async () => {
+    const response = await apiClient.get('/api/admin/database/modules');
+    return response.data;
+  },
+
+  /**
+   * Get available countries in database
+   * @returns {Promise} List of countries
+   */
+  getAvailableCountries: async () => {
+    const response = await apiClient.get('/api/admin/database/countries');
+    return response.data;
+  },
+
+  /**
+   * Clear database
+   * @param {Boolean} confirm - Must be true to proceed
+   * @returns {Promise} Clear result
+   */
+  clearDatabase: async (confirm = false) => {
+    const response = await apiClient.post(`/api/admin/database/clear?confirm=${confirm}`);
+    return response.data;
   }
 };
 

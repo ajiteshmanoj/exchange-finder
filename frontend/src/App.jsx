@@ -3,14 +3,16 @@
  * Root application component with conditional routing
  */
 
-import React from 'react';
+import React, { useState } from 'react';
 import { useSession } from './hooks/useSession';
 import Navbar from './components/Navbar';
 import Login from './components/Login';
 import Search from './components/Search';
+import AdminPanel from './components/AdminPanel';
 
 function App() {
   const { session, createSession, clearSession, isAuthenticated } = useSession();
+  const [activeTab, setActiveTab] = useState('search'); // 'search' or 'admin'
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -25,7 +27,38 @@ function App() {
         {!isAuthenticated() ? (
           <Login onLogin={createSession} />
         ) : (
-          <Search credentials={session.credentials} />
+          <>
+            {/* Tab Navigation */}
+            <div className="flex gap-4 mb-8">
+              <button
+                onClick={() => setActiveTab('search')}
+                className={`px-6 py-2 rounded-lg font-medium transition-colors ${
+                  activeTab === 'search'
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-200'
+                }`}
+              >
+                Search
+              </button>
+              <button
+                onClick={() => setActiveTab('admin')}
+                className={`px-6 py-2 rounded-lg font-medium transition-colors ${
+                  activeTab === 'admin'
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-200'
+                }`}
+              >
+                Admin Panel
+              </button>
+            </div>
+
+            {/* Tab Content */}
+            {activeTab === 'search' ? (
+              <Search credentials={session.credentials} />
+            ) : (
+              <AdminPanel credentials={session.credentials} />
+            )}
+          </>
         )}
       </main>
 

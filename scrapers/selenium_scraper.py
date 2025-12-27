@@ -407,16 +407,43 @@ class SeleniumNTUScraper:
             return False
 
     def _check_session(self) -> bool:
-        """Check if session is still valid, re-login if needed."""
+        """
+        Check if session is still valid, re-login if needed.
+
+        This method verifies the actual server session state by checking
+        the current URL, not just the internal boolean flag.
+        """
         if not self._authenticated:
             return self.login()
 
-        # Don't aggressively check URL - just return True if we think we're authenticated
-        # We'll handle actual session expiry when it happens during operations
-        return True
+        # Actually verify server session by checking current URL
+        try:
+            current_url = self.driver.current_url
+
+            # If we're on SSO page, session has expired
+            if 'sso' in current_url.lower() or 'login' in current_url.lower():
+                print("\n  ⚠️  Session expired (detected SSO redirect)")
+                self._authenticated = False
+                return self.login()
+
+            # If we're on an error page or blank page, try to navigate back
+            if 'blank.htm' in current_url.lower() or 'error' in current_url.lower():
+                return self._ensure_on_search_page()
+
+            return True
+
+        except Exception as e:
+            print(f"  ⚠️  Session check error: {e}")
+            self._authenticated = False
+            return self.login()
 
     def _ensure_on_search_page(self) -> bool:
-        """Navigate to search page if needed, re-login if session expired."""
+        """
+        Navigate to search page if needed, re-login if session expired.
+
+        This is the primary method for ensuring we're on the right page
+        before performing any scraping operations.
+        """
         try:
             current_url = self.driver.current_url
 
@@ -425,7 +452,7 @@ class SeleniumNTUScraper:
                 return True
 
             # If we're on SSO page, we need to re-login
-            if 'sso' in current_url.lower():
+            if 'sso' in current_url.lower() or 'login' in current_url.lower():
                 print("\n  ⚠️  Session expired, re-logging in...")
                 self._authenticated = False
                 return self.login()
@@ -443,7 +470,20 @@ class SeleniumNTUScraper:
             except:
                 pass
 
-            return True
+            # Check if we were redirected to SSO after navigation (session truly expired)
+            current_url = self.driver.current_url
+            if 'sso' in current_url.lower() or 'login' in current_url.lower():
+                print("\n  ⚠️  Session expired after navigation, re-logging in...")
+                self._authenticated = False
+                return self.login()
+
+            # Verify we're on the search page
+            if 'instep' in current_url.lower() or 'show_rec' in current_url.lower():
+                return True
+
+            # If still not on search page, something's wrong
+            print(f"  ⚠️  Unexpected page after navigation: {current_url[:60]}...")
+            return False
 
         except Exception as e:
             print(f"  ⚠️  Error ensuring search page: {e}")
@@ -463,17 +503,14 @@ class SeleniumNTUScraper:
         Returns:
             Dictionary mapping module code -> list of mappings
         """
-        if not self._check_session():
-            print(f"      ✗ Session invalid for {university_name}")
+        # Use _ensure_on_search_page() for robust session handling
+        if not self._ensure_on_search_page():
+            print(f"      ✗ Could not access search page for {university_name}")
             return {}
 
         try:
-            # Get the INSTEP page URL with student ID
-            student_id = self.config.get('ntu_sso', {}).get('student_id', self.username)
-            instep_url = f"https://wis.ntu.edu.sg/pls/lms/instep_past_subj_matching.show_rec_INSTEP?p1={student_id}&p2="
-
-            # Navigate to the search page
-            self.driver.get(instep_url)
+            # We're now on the search page (ensured by _ensure_on_search_page)
+            # No need to navigate again - just proceed with form interaction
 
             wait = WebDriverWait(self.driver, 10)
 
@@ -605,24 +642,11 @@ class SeleniumNTUScraper:
                 ...
             }
         """
-        if not self._check_session():
-            raise RuntimeError("Session invalid - cannot scrape countries")
+        # Use _ensure_on_search_page() for robust session handling
+        if not self._ensure_on_search_page():
+            raise RuntimeError("Could not access search page - session may be invalid")
 
         try:
-            # Navigate to search page with student ID
-            student_id = self.config.get('ntu_sso', {}).get('student_id', self.username)
-            instep_url = f"https://wis.ntu.edu.sg/pls/lms/instep_past_subj_matching.show_rec_INSTEP?p1={student_id}&p2="
-
-            self.driver.get(instep_url)
-            time.sleep(2)
-
-            # Dismiss any alert
-            try:
-                alert = self.driver.switch_to.alert
-                alert.accept()
-            except:
-                pass
-
             wait = WebDriverWait(self.driver, 10)
 
             # Find country dropdown and extract values FIRST (before any selections)

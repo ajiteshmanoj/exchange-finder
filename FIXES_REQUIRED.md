@@ -6,61 +6,18 @@ This document tracks known issues and improvements needed for the NTU Exchange S
 
 ## Critical Issues
 
-### 1. Session Management During Search (Repeated Logins)
+### 1. Session Management During Search (Repeated Logins) - FIXED
 
-**Problem:** During module mapping searches, the scraper repeatedly logs in even though a valid session exists. This causes:
-- Excessive login attempts to NTU SSO
-- Slow search performance
-- Potential rate limiting or account lockout
+**Status:** COMPLETED
 
-**Root Cause:** The `_check_session()` method and navigation logic don't properly maintain session state when navigating between different NTU INSTEP pages.
+**What was fixed:**
+1. Updated `_check_session()` to actually verify server session by checking current URL
+2. Made `_ensure_on_search_page()` more robust with proper SSO redirect detection
+3. Integrated `_ensure_on_search_page()` into `search_university_mappings()` and `scrape_countries_and_universities()`
+4. Added proper session expiry handling with automatic re-login
 
-**Files Affected:**
-- `scrapers/selenium_scraper.py`
-
-**Fix Required:**
-1. Complete the `_ensure_on_search_page()` method implementation
-2. Replace aggressive `_check_session()` calls with smarter session handling
-3. Use URL-based navigation checks only when necessary
-4. Integrate `_ensure_on_search_page()` into `search_module_mappings()` and `scrape_countries_and_universities()`
-
-**Suggested Implementation:**
-```python
-def _ensure_on_search_page(self) -> bool:
-    """Navigate to search page if needed, re-login if session expired."""
-    target_url = "https://wis.ntu.edu.sg/pls/lms/instep_past_subj_matching.show_rec2"
-
-    try:
-        current_url = self.driver.current_url
-
-        # Already on the right page
-        if "instep_past_subj_matching" in current_url:
-            return True
-
-        # On SSO page - session expired, need to re-login
-        if "ntu.edu.sg/cas/" in current_url or "login" in current_url.lower():
-            self._authenticated = False
-            return self.login()
-
-        # On different NTU page - navigate to search page
-        self.driver.get(target_url + f"?p_stu_id={self.username}")
-        time.sleep(2)
-
-        # Verify navigation succeeded
-        if "instep_past_subj_matching" in self.driver.current_url:
-            return True
-
-        # If redirected to login, session expired
-        if "ntu.edu.sg/cas/" in self.driver.current_url:
-            self._authenticated = False
-            return self.login()
-
-        return True
-
-    except Exception as e:
-        print(f"Error ensuring search page: {e}")
-        return False
-```
+**Files Modified:**
+- `scrapers/selenium_scraper.py` (lines 409-490)
 
 ---
 
@@ -127,6 +84,12 @@ def _ensure_on_search_page(self) -> bool:
 - [x] 30-day caching for countries/universities
 - [x] Removed hardcoded country and module lists
 - [x] Fixed stale element reference during country scraping
+- [x] **Pre-scraped database architecture** (NEW)
+  - SQLite database for instant searches (<100ms)
+  - Admin scrape endpoint to populate database
+  - Login only once during full scrape
+  - ~900 universities, ~15,000+ mappings stored
+  - Frontend admin panel for scrape management
 
 ---
 
