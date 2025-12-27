@@ -24,9 +24,12 @@ from backend.api.models import (
     CacheClearResponse, UniversityResult, ModuleMapping,
     ProgressMessage, CompleteMessage, ErrorMessage,
     CountriesUniversitiesRequest, CountriesUniversitiesResponse, CountryUniversity,
-    LoginRequest, LoginResponse
+    LoginRequest, LoginResponse,
+    DatabaseStatusResponse, DatabaseSearchRequest, DatabaseSearchResponse
 )
 from backend.services.recommendation_engine import RecommendationEngine
+from backend.services.database import DatabaseManager
+from backend.api.admin import router as admin_router
 
 
 # Initialize FastAPI app
@@ -36,15 +39,31 @@ app = FastAPI(
     Find suitable exchange universities based on module mappings.
 
     ## Features
-    - Search universities by module mappings
+    - **Instant Search**: Query pre-scraped database for instant results (<1 second)
+    - **Admin Scrape**: Trigger full database scrape via admin endpoint
+    - **Live Search**: Fallback to live scraping if database is empty
     - Intelligent caching (365d for universities, 30d for mappings)
-    - First search: 15-25 minutes (live scraping)
+
+    ## Two Search Modes
+
+    ### 1. Database Search (Recommended)
+    - `POST /api/search/db` - Query pre-scraped SQLite database
+    - No credentials needed (data already stored)
+    - Response time: <100ms
+    - Requires admin to run initial scrape first
+
+    ### 2. Live Search (Fallback)
+    - `POST /api/search` - Live scraping from NTU
+    - NTU SSO credentials required
+    - First search: 15-25 minutes
     - Subsequent searches: Instant (from cache)
 
-    ## Authentication
-    NTU SSO credentials required in request body.
+    ## Admin Endpoints
+    - `POST /api/admin/scrape` - Start full database scrape
+    - `GET /api/admin/scrape/status/{job_id}` - Track scrape progress
+    - `GET /api/admin/database/status` - Check database status
     """,
-    version="1.0.0",
+    version="2.0.0",
     docs_url="/docs",
     redoc_url="/redoc",
     contact={
@@ -76,6 +95,9 @@ except Exception as e:
 # Initialize thread pool executor for running blocking operations
 executor = ThreadPoolExecutor(max_workers=4)
 
+# Include admin router
+app.include_router(admin_router)
+
 
 # ============= ENDPOINTS =============
 
@@ -86,15 +108,26 @@ async def root():
 
     Returns basic API information and status.
     """
+    # Check database status
+    db = DatabaseManager()
+    db_stats = db.get_database_stats()
+
     return {
         "status": "online",
         "service": "NTU Exchange University Recommendation API",
-        "version": "1.0.0",
+        "version": "2.0.0",
         "docs": "/docs",
+        "database": {
+            "populated": db_stats['populated'],
+            "total_mappings": db_stats['total_mappings'],
+            "last_scrape": db_stats['last_scrape']
+        },
         "endpoints": {
-            "search": "POST /api/search",
-            "clear_cache": "POST /api/cache/clear",
-            "health": "GET /"
+            "search_db": "POST /api/search/db (instant, no credentials)",
+            "search_live": "POST /api/search (live scraping)",
+            "admin_scrape": "POST /api/admin/scrape",
+            "database_status": "GET /api/admin/database/status",
+            "clear_cache": "POST /api/cache/clear"
         }
     }
 
@@ -193,13 +226,159 @@ async def verify_login(request: LoginRequest):
 
 
 @app.post(
+    "/api/search/db",
+    response_model=DatabaseSearchResponse,
+    status_code=status.HTTP_200_OK,
+    tags=["Search"],
+    summary="Search pre-scraped database (RECOMMENDED - Instant)",
+    description="""
+    Search for exchange universities from pre-scraped database.
+
+    ## Performance
+    - Response time: <100ms (instant)
+    - No credentials needed - data already stored
+    - Requires admin to run initial scrape first
+
+    ## Prerequisites
+    Database must be populated using `/api/admin/scrape` first.
+    Check database status at `/api/admin/database/status`.
+
+    ## Request
+    - `target_modules`: List of NTU module codes (e.g., ["SC4001", "SC4002"])
+    - `target_countries`: Optional list of countries to filter
+    - `min_mappable_modules`: Minimum mappable modules required (default: 1)
+
+    ## Response
+    Returns ranked list of universities with module mappings.
+    """
+)
+async def search_database(request: DatabaseSearchRequest):
+    """
+    Search pre-scraped database for module mappings.
+
+    This is the recommended search method - instant results without live scraping.
+    """
+    from datetime import datetime
+    from backend.services.pdf_service import get_pdf_service
+
+    start_time = datetime.now()
+
+    db = DatabaseManager()
+
+    # Load PDF data service for spots/CGPA enrichment
+    pdf_service = get_pdf_service()
+
+    # Check if database is populated
+    if not db.is_populated():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Database is empty. Please run /api/admin/scrape first to populate the database."
+        )
+
+    try:
+        # Query database
+        raw_results = db.get_mappings_by_modules(
+            request.target_modules,
+            request.target_countries
+        )
+
+        # Convert to response format
+        results = []
+        rank = 1
+
+        for uni_key, uni_data in raw_results.items():
+            country = uni_data['country']
+            university = uni_data['university']
+            mappings = uni_data['mappings']
+
+            # Count mappable modules
+            mappable_count = len([m for m in mappings if mappings[m]])
+
+            # Filter by min_mappable_modules
+            if mappable_count < request.min_mappable_modules:
+                continue
+
+            # Build mappable_modules dict
+            mappable_modules = {}
+            for module_code, module_mappings in mappings.items():
+                if module_mappings:
+                    mappable_modules[module_code] = [
+                        ModuleMapping(
+                            ntu_module=m['ntu_module'],
+                            ntu_module_name=m['ntu_module_name'],
+                            partner_module_code=m['partner_module_code'],
+                            partner_module_name=m['partner_module_name'],
+                            academic_units=m['academic_units'],
+                            status=m['status'],
+                            approval_year=m['approval_year'],
+                            semester=m['semester']
+                        )
+                        for m in module_mappings
+                    ]
+
+            # Find unmappable modules
+            unmappable = [m for m in request.target_modules if m not in mappable_modules]
+
+            # Get spots and CGPA from PDF data
+            pdf_data = pdf_service.get_university_data(university, country)
+            sem1_spots = pdf_data.get('sem1_spots', 0)
+            min_cgpa = pdf_data.get('min_cgpa', 0.0)
+            remarks = pdf_data.get('remarks', '')
+
+            results.append(UniversityResult(
+                rank=rank,
+                name=university,
+                country=country,
+                university_code=uni_key,
+                sem1_spots=sem1_spots,
+                min_cgpa=min_cgpa,
+                mappable_count=mappable_count,
+                coverage_score=(mappable_count / len(request.target_modules)) * 100,
+                mappable_modules=mappable_modules,
+                unmappable_modules=unmappable,
+                remarks=remarks
+            ))
+            rank += 1
+
+        # Sort by: mappable_count (desc), sem1_spots (desc), min_cgpa (asc), country, name
+        results.sort(key=lambda x: (-x.mappable_count, -x.sem1_spots, x.min_cgpa, x.country, x.name))
+
+        # Re-assign ranks after sorting
+        for i, result in enumerate(results):
+            result.rank = i + 1
+
+        end_time = datetime.now()
+        execution_time = (end_time - start_time).total_seconds()
+
+        # Get database timestamp
+        stats = db.get_database_stats()
+
+        return DatabaseSearchResponse(
+            status="success",
+            message=f"Found {len(results)} universities matching criteria",
+            execution_time_seconds=execution_time,
+            database_timestamp=stats['last_scrape'],
+            results_count=len(results),
+            results=results
+        )
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Database query failed: {str(e)}"
+        )
+
+
+@app.post(
     "/api/search",
     response_model=SearchResponse,
     status_code=status.HTTP_200_OK,
     tags=["Search"],
-    summary="Search for exchange universities",
+    summary="Search for exchange universities (Live scraping)",
     description="""
-    Search for exchange universities based on module mappings.
+    Search for exchange universities based on module mappings via live scraping.
+
+    **NOTE**: Consider using `/api/search/db` instead for instant results.
 
     ## Performance
     - **First search** (cold cache): 15-25 minutes

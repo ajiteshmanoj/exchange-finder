@@ -376,3 +376,178 @@ class CountriesUniversitiesRequest(BaseModel):
                 "use_cache": True
             }
         }
+
+
+# ============= ADMIN MODELS =============
+
+class AdminScrapeRequest(BaseModel):
+    """Request to trigger admin full scrape"""
+    credentials: NTUCredentials
+    headless: bool = Field(default=True, description="Run browser in headless mode")
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "credentials": {
+                    "username": "AJITESH001",
+                    "password": "your_password",
+                    "domain": "Student"
+                },
+                "headless": True
+            }
+        }
+
+
+class ScrapeJobStatus(BaseModel):
+    """Status of a scrape job"""
+    job_id: int = Field(..., description="Scrape job ID")
+    status: str = Field(..., description="Job status (running/completed/failed/cancelled)")
+    total_countries: int = Field(default=0, description="Total countries to scrape")
+    completed_countries: int = Field(default=0, description="Countries completed")
+    total_universities: int = Field(default=0, description="Total universities to scrape")
+    completed_universities: int = Field(default=0, description="Universities completed")
+    current_country: Optional[str] = Field(default=None, description="Currently processing country")
+    current_university: Optional[str] = Field(default=None, description="Currently processing university")
+    started_at: Optional[str] = Field(default=None, description="Job start time (ISO format)")
+    completed_at: Optional[str] = Field(default=None, description="Job completion time (ISO format)")
+    error_message: Optional[str] = Field(default=None, description="Error message if failed")
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "job_id": 1,
+                "status": "running",
+                "total_countries": 45,
+                "completed_countries": 12,
+                "total_universities": 900,
+                "completed_universities": 245,
+                "current_country": "Denmark",
+                "current_university": "University of Copenhagen",
+                "started_at": "2025-12-25T10:30:00",
+                "completed_at": None,
+                "error_message": None
+            }
+        }
+
+
+class ScrapeStartResponse(BaseModel):
+    """Response when starting a scrape job"""
+    status: str = Field(default="started", description="Job status")
+    job_id: int = Field(..., description="Scrape job ID for tracking")
+    message: str = Field(..., description="Status message")
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "status": "started",
+                "job_id": 1,
+                "message": "Full scrape started. Use /api/admin/scrape/status/1 to track progress."
+            }
+        }
+
+
+class DatabaseStatusResponse(BaseModel):
+    """Response for database status check"""
+    populated: bool = Field(..., description="Whether database has data")
+    total_countries: int = Field(default=0, description="Number of countries in database")
+    total_universities: int = Field(default=0, description="Number of universities in database")
+    total_mappings: int = Field(default=0, description="Number of module mappings in database")
+    unique_modules: int = Field(default=0, description="Number of unique NTU modules")
+    last_scrape: Optional[str] = Field(default=None, description="Last successful scrape timestamp")
+    db_path: str = Field(..., description="Database file path")
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "populated": True,
+                "total_countries": 45,
+                "total_universities": 900,
+                "total_mappings": 15000,
+                "unique_modules": 150,
+                "last_scrape": "2025-12-25T10:30:00",
+                "db_path": "data/exchange_mappings.db"
+            }
+        }
+
+
+class DatabaseSearchRequest(BaseModel):
+    """Request for searching pre-scraped database (no credentials needed)"""
+    target_modules: List[str] = Field(
+        ...,
+        min_length=1,
+        description="List of NTU module codes to search for"
+    )
+    target_countries: Optional[List[str]] = Field(
+        default=None,
+        description="Optional list of countries to filter by"
+    )
+    min_mappable_modules: int = Field(
+        default=1,
+        ge=1,
+        description="Minimum number of mappable modules required"
+    )
+
+    @validator('target_modules')
+    def validate_modules(cls, v):
+        """Ensure module codes are uppercase"""
+        return [m.upper() for m in v]
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "target_modules": ["SC4001", "SC4002", "SC4062"],
+                "target_countries": ["Australia", "Denmark"],
+                "min_mappable_modules": 2
+            }
+        }
+
+
+class DatabaseSearchResponse(BaseModel):
+    """Response for database search (instant results)"""
+    status: str = Field(default="success", description="Response status")
+    message: str = Field(..., description="Human-readable message")
+    execution_time_seconds: float = Field(..., description="Query execution time")
+    database_timestamp: Optional[str] = Field(default=None, description="When database was last updated")
+    results_count: int = Field(..., description="Number of universities found")
+    results: List[UniversityResult] = Field(..., description="List of university results")
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "status": "success",
+                "message": "Found 25 universities matching criteria",
+                "execution_time_seconds": 0.05,
+                "database_timestamp": "2025-12-25T10:30:00",
+                "results_count": 25,
+                "results": []
+            }
+        }
+
+
+class ScrapeProgressMessage(BaseModel):
+    """WebSocket message for admin scrape progress"""
+    type: str = Field(..., description="Message type (started/discovery/university_start/university_complete/country_complete/completed/error)")
+    job_id: Optional[int] = Field(default=None, description="Scrape job ID")
+    message: Optional[str] = Field(default=None, description="Progress message")
+    country: Optional[str] = Field(default=None, description="Current country")
+    university: Optional[str] = Field(default=None, description="Current university")
+    mappings_found: Optional[int] = Field(default=None, description="Mappings found for current university")
+    completed_countries: Optional[int] = Field(default=None, description="Countries completed")
+    total_countries: Optional[int] = Field(default=None, description="Total countries")
+    completed_universities: Optional[int] = Field(default=None, description="Universities completed")
+    total_universities: Optional[int] = Field(default=None, description="Total universities")
+    total_mappings: Optional[int] = Field(default=None, description="Total mappings found")
+    duration_seconds: Optional[float] = Field(default=None, description="Total duration in seconds")
+    error: Optional[str] = Field(default=None, description="Error message if failed")
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "type": "university_complete",
+                "country": "Australia",
+                "university": "University of Melbourne",
+                "mappings_found": 25,
+                "completed_universities": 45,
+                "total_universities": 900
+            }
+        }

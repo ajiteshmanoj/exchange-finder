@@ -1,14 +1,12 @@
 /**
  * Search Component
- * Main search interface with inline progress and results
+ * Main search interface - uses pre-scraped database for instant results
  */
 
-import React, { useState } from 'react';
-import { useWebSocket } from '../hooks/useWebSocket';
-import { DEFAULT_MIN_MAPPABLE_MODULES, DEFAULT_USE_CACHE } from '../utils/constants';
+import React, { useState, useEffect } from 'react';
+import { api } from '../services/api';
+import { DEFAULT_MIN_MAPPABLE_MODULES } from '../utils/constants';
 import ModuleSelector from './ModuleSelector';
-import CountrySelector from './CountrySelector';
-import ProgressDisplay from './ProgressDisplay';
 import UniversityCard from './UniversityCard';
 
 const Search = ({ credentials }) => {
@@ -16,52 +14,73 @@ const Search = ({ credentials }) => {
   const [selectedCountries, setSelectedCountries] = useState([]);
   const [selectedModules, setSelectedModules] = useState([]);
   const [minMappableModules, setMinMappableModules] = useState(DEFAULT_MIN_MAPPABLE_MODULES);
-  const [useCache, setUseCache] = useState(DEFAULT_USE_CACHE);
 
-  // WebSocket state
-  const {
-    progressMessages,
-    results,
-    error,
-    isSearching,
-    currentStep,
-    executionTime,
-    cacheUsed,
-    startSearch,
-    cancelSearch,
-    reset
-  } = useWebSocket();
+  // Search state
+  const [results, setResults] = useState(null);
+  const [error, setError] = useState(null);
+  const [isSearching, setIsSearching] = useState(false);
+  const [executionTime, setExecutionTime] = useState(null);
+  const [dbStatus, setDbStatus] = useState(null);
 
-  const handleSearch = () => {
-    if (selectedCountries.length === 0) {
-      alert('Please select at least one country');
-      return;
-    }
+  // Available countries from database
+  const [availableCountries, setAvailableCountries] = useState([]);
+  const [loadingCountries, setLoadingCountries] = useState(true);
 
+  // Load database status and available countries on mount
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        const [status, countriesData] = await Promise.all([
+          api.getDatabaseStatus(),
+          api.getAvailableCountries()
+        ]);
+        setDbStatus(status);
+        setAvailableCountries(countriesData.countries || []);
+      } catch (err) {
+        console.error('Failed to load database info:', err);
+        setError('Failed to load database. Please run admin scrape first.');
+      } finally {
+        setLoadingCountries(false);
+      }
+    };
+    loadData();
+  }, []);
+
+  const handleSearch = async () => {
     if (selectedModules.length === 0) {
       alert('Please select at least one module');
       return;
     }
 
-    const searchRequest = {
-      credentials,
-      target_countries: selectedCountries,
-      target_modules: selectedModules.map(m => m.code), // Extract module codes
-      min_mappable_modules: minMappableModules,
-      use_cache: useCache
-    };
+    setIsSearching(true);
+    setError(null);
+    setResults(null);
 
-    startSearch(searchRequest);
+    try {
+      const response = await api.searchDatabase(
+        selectedModules.map(m => m.code),
+        selectedCountries.length > 0 ? selectedCountries : null,
+        minMappableModules
+      );
+
+      setResults(response.results);
+      setExecutionTime(response.execution_time_seconds);
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Search failed. Is the database populated?');
+    } finally {
+      setIsSearching(false);
+    }
   };
 
   const handleNewSearch = () => {
-    reset();
+    setResults(null);
+    setError(null);
+    setExecutionTime(null);
   };
 
   const showForm = !isSearching && !results && !error;
-  const showProgress = isSearching;
   const showResults = !isSearching && results;
-  const showError = !isSearching && error;
+  const showError = !isSearching && error && !results;
 
   return (
     <div className="max-w-7xl mx-auto space-y-6">
@@ -73,17 +92,53 @@ const Search = ({ credentials }) => {
         <p className="text-gray-600">
           Find universities that match your module requirements
         </p>
+        {dbStatus && (
+          <div className="mt-3 text-sm text-gray-500">
+            Database: {dbStatus.total_universities} universities, {dbStatus.total_mappings.toLocaleString()} mappings
+            {dbStatus.last_scrape && ` (Last updated: ${new Date(dbStatus.last_scrape).toLocaleDateString()})`}
+          </div>
+        )}
       </div>
 
       {/* Search Form */}
       {showForm && (
         <div className="bg-white rounded-lg shadow-md p-6 space-y-6">
-          {/* Country Selector */}
-          <CountrySelector
-            selectedCountries={selectedCountries}
-            onChange={setSelectedCountries}
-            credentials={credentials}
-          />
+          {/* Database not populated warning */}
+          {dbStatus && !dbStatus.populated && (
+            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+              <p className="text-yellow-800">
+                Database is empty. Please go to Admin Panel and run a full scrape first.
+              </p>
+            </div>
+          )}
+
+          {/* Country Selector - Simple multi-select from database */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Filter by Countries (optional)
+            </label>
+            {loadingCountries ? (
+              <div className="text-gray-500">Loading countries...</div>
+            ) : (
+              <select
+                multiple
+                value={selectedCountries}
+                onChange={(e) => {
+                  const values = Array.from(e.target.selectedOptions, option => option.value);
+                  setSelectedCountries(values);
+                }}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                style={{ minHeight: '120px' }}
+              >
+                {availableCountries.map(country => (
+                  <option key={country} value={country}>{country}</option>
+                ))}
+              </select>
+            )}
+            <p className="text-xs text-gray-500 mt-1">
+              Hold Ctrl/Cmd to select multiple. Leave empty to search all countries.
+            </p>
+          </div>
 
           {/* Module Selector */}
           <ModuleSelector
@@ -92,76 +147,37 @@ const Search = ({ credentials }) => {
           />
 
           {/* Settings */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* Min Mappable Modules */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Minimum Mappable Modules
-              </label>
-              <input
-                type="number"
-                min="1"
-                max={selectedModules.length}
-                value={minMappableModules}
-                onChange={(e) => setMinMappableModules(parseInt(e.target.value))}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-ntu-blue focus:border-transparent"
-              />
-            </div>
-
-            {/* Use Cache */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Cache Settings
-              </label>
-              <label className="flex items-center p-3 border border-gray-300 rounded-lg cursor-pointer hover:bg-gray-50">
-                <input
-                  type="checkbox"
-                  checked={useCache}
-                  onChange={(e) => setUseCache(e.target.checked)}
-                  className="w-4 h-4 text-ntu-blue border-gray-300 rounded focus:ring-ntu-blue"
-                />
-                <span className="ml-2 text-gray-700">
-                  Use cached data (recommended for faster results)
-                </span>
-              </label>
-            </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Minimum Mappable Modules
+            </label>
+            <input
+              type="number"
+              min="1"
+              max={selectedModules.length || 10}
+              value={minMappableModules}
+              onChange={(e) => setMinMappableModules(parseInt(e.target.value) || 1)}
+              className="w-32 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            />
           </div>
 
           {/* Start Search Button */}
           <div>
             <button
               onClick={handleSearch}
-              className="w-full bg-ntu-red hover:bg-ntu-red-light text-white font-semibold py-4 rounded-lg transition-colors duration-200"
+              disabled={isSearching || !dbStatus?.populated}
+              className={`w-full font-semibold py-4 rounded-lg transition-colors duration-200 ${
+                isSearching || !dbStatus?.populated
+                  ? 'bg-gray-400 cursor-not-allowed text-gray-200'
+                  : 'bg-blue-600 hover:bg-blue-700 text-white'
+              }`}
             >
-              Start Search
+              {isSearching ? 'Searching...' : 'Search'}
             </button>
-            <p className="text-sm text-gray-500 mt-2 text-center">
-              First search may take 15-25 minutes. Subsequent searches are instant with cache.
+            <p className="text-sm text-green-600 mt-2 text-center font-medium">
+              Instant results from pre-scraped database
             </p>
           </div>
-        </div>
-      )}
-
-      {/* Progress Display */}
-      {showProgress && (
-        <div className="bg-white rounded-lg shadow-md p-6 space-y-4">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-xl font-bold text-gray-800">
-              Search in Progress
-            </h3>
-            <button
-              onClick={cancelSearch}
-              className="px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded-lg transition-colors"
-            >
-              Cancel
-            </button>
-          </div>
-
-          <ProgressDisplay
-            progressMessages={progressMessages}
-            currentStep={currentStep}
-            isSearching={isSearching}
-          />
         </div>
       )}
 
@@ -199,14 +215,13 @@ const Search = ({ credentials }) => {
                   matching your criteria
                 </p>
                 <p className="text-sm text-gray-500 mt-1">
-                  Execution time: {executionTime?.toFixed(2)}s •{' '}
-                  {cacheUsed ? 'Loaded from cache' : 'Fresh data'}
+                  Execution time: {(executionTime * 1000).toFixed(0)}ms (from pre-scraped database)
                 </p>
               </div>
 
               <button
                 onClick={handleNewSearch}
-                className="px-6 py-3 bg-ntu-blue hover:bg-ntu-blue-light text-white font-semibold rounded-lg transition-colors"
+                className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition-colors"
               >
                 New Search
               </button>
@@ -226,7 +241,7 @@ const Search = ({ credentials }) => {
                 No universities found matching your criteria.
               </p>
               <p className="text-gray-500 mt-2">
-                Try adjusting your search parameters.
+                Try adjusting your search parameters or reducing the minimum mappable modules.
               </p>
             </div>
           )}
