@@ -155,13 +155,15 @@ export const api = {
    * Search pre-scraped database (instant, no credentials)
    * @param {Array} targetModules - List of NTU module codes
    * @param {Array} targetCountries - Optional list of countries
+   * @param {Number} targetSemester - Target semester (1, 2, or null for both)
    * @param {Number} minMappableModules - Minimum mappable modules
    * @returns {Promise} Search results
    */
-  searchDatabase: async (targetModules, targetCountries = null, minMappableModules = 1) => {
+  searchDatabase: async (targetModules, targetCountries = null, targetSemester = null, minMappableModules = 1) => {
     const response = await apiClient.post('/api/search/db', {
       target_modules: targetModules,
       target_countries: targetCountries,
+      target_semester: targetSemester,
       min_mappable_modules: minMappableModules
     });
     return response.data;

@@ -136,6 +136,7 @@ class UniversityResult(BaseModel):
     country: str = Field(..., description="Country")
     university_code: str = Field(..., description="University code")
     sem1_spots: int = Field(..., description="Semester 1 available spots")
+    sem2_spots: int = Field(default=0, description="Semester 2 available spots")
     min_cgpa: float = Field(..., description="Minimum CGPA requirement")
     mappable_count: int = Field(..., description="Number of mappable modules")
     coverage_score: float = Field(..., description="Coverage percentage")
@@ -151,6 +152,7 @@ class UniversityResult(BaseModel):
                 "country": "Australia",
                 "university_code": "AU-MELB",
                 "sem1_spots": 3,
+                "sem2_spots": 2,
                 "min_cgpa": 3.7,
                 "mappable_count": 4,
                 "coverage_score": 66.7,
@@ -481,6 +483,12 @@ class DatabaseSearchRequest(BaseModel):
         default=None,
         description="Optional list of countries to filter by"
     )
+    target_semester: Optional[int] = Field(
+        default=None,
+        ge=1,
+        le=2,
+        description="Target semester (1, 2, or null for both). Filters universities with spots in selected semester."
+    )
     min_mappable_modules: int = Field(
         default=1,
         ge=1,
@@ -497,6 +505,7 @@ class DatabaseSearchRequest(BaseModel):
             "example": {
                 "target_modules": ["SC4001", "SC4002", "SC4062"],
                 "target_countries": ["Australia", "Denmark"],
+                "target_semester": 1,
                 "min_mappable_modules": 2
             }
         }
