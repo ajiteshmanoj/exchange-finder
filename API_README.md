@@ -1,537 +1,214 @@
-# NTU Exchange University Recommendation API
+# NTU Exchange Finder API
 
-FastAPI web application for finding suitable exchange universities based on module mappings.
+FastAPI backend for the NTU Exchange University Finder.
 
-## Features
+## Live API
 
-- 🔍 **Intelligent Search**: Find universities that match your module requirements
-- ⚡ **Smart Caching**: First search takes 15-25 minutes, subsequent searches are instant
-- 🔒 **Secure**: Credentials passed in request body, not stored server-side
-- 📊 **Comprehensive Results**: Ranked universities with detailed module mappings
-- 🌐 **RESTful API**: Standard HTTP endpoints with JSON responses
-- 📖 **Auto-Documentation**: Interactive API docs at `/docs`
+**Base URL:** `https://exchange-finder-api.onrender.com`
 
-## Architecture
+**API Docs:** `https://exchange-finder-api.onrender.com/docs`
 
-The API wraps your existing CLI scraper with a caching layer:
+## Quick Start
 
-```
-FastAPI API Layer (backend/)
-    ↓
-Recommendation Engine (orchestrates pipeline)
-    ↓
-Cache Manager (365d for universities, 30d for mappings)
-    ↓
-Existing Scrapers & Processors (unchanged)
-```
-
-**Key Components**:
-- `backend/api/main.py` - FastAPI application with endpoints
-- `backend/api/models.py` - Pydantic request/response models
-- `backend/services/recommendation_engine.py` - Pipeline orchestrator
-- `backend/services/cache_manager.py` - Intelligent caching with TTL
-- `scrapers/`, `processors/`, `utils/` - Existing CLI code (unchanged)
-
-## Installation
-
-### 1. Install Dependencies
+### Search for Universities
 
 ```bash
-pip install -r requirements.txt
+curl -X POST "https://exchange-finder-api.onrender.com/api/search/db" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "target_modules": ["SC4001", "SC4002"],
+    "min_mappable_modules": 1
+  }'
 ```
 
-This installs:
-- FastAPI (web framework)
-- Uvicorn (ASGI server)
-- Pydantic (data validation)
-- All existing CLI dependencies
-
-### 2. Verify Setup
+### Check Database Status
 
 ```bash
-python3 -c "import backend.api.main; print('✓ API imports successfully')"
+curl "https://exchange-finder-api.onrender.com/api/admin/database/status"
 ```
 
-## Usage
+## API Endpoints
 
-### Starting the Server
+### Public Endpoints (No Auth Required)
 
-```bash
-python run_api.py
-```
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/` | Health check + database stats |
+| POST | `/api/search/db` | Search pre-scraped database |
+| GET | `/api/admin/database/status` | Database statistics |
+| GET | `/api/admin/database/countries` | List all countries |
+| GET | `/api/admin/database/modules` | List all module codes |
 
-The server will start on `http://0.0.0.0:8000`
+### Search Request
 
-**Available URLs**:
-- API: http://localhost:8000
-- Interactive Docs: http://localhost:8000/docs
-- ReDoc: http://localhost:8000/redoc
-
-### API Endpoints
-
-#### 1. Health Check
-```bash
-GET /
-```
-
-**Response**:
 ```json
+POST /api/search/db
 {
-  "status": "online",
-  "service": "NTU Exchange University Recommendation API",
-  "version": "1.0.0",
-  "docs": "/docs"
+  "target_modules": ["SC4001", "SC4002", "SC4003"],
+  "target_countries": ["Sweden", "Denmark", "Finland"],
+  "target_semester": 1,
+  "min_mappable_modules": 2
 }
 ```
 
-#### 2. Search Universities
-```bash
-POST /api/search
-```
+**Parameters:**
+- `target_modules` (required): List of NTU module codes to search
+- `target_countries` (optional): Filter by countries (null = all countries)
+- `target_semester` (optional): 1, 2, or null (both semesters)
+- `min_mappable_modules` (optional): Minimum mappable modules required (default: 1)
 
-**Request Body**:
-```json
-{
-  "credentials": {
-    "username": "AJITESH001",
-    "password": "your_password",
-    "domain": "Student"
-  },
-  "target_countries": ["Australia", "Denmark", "Sweden"],
-  "target_modules": ["SC4001", "SC4002", "SC4062"],
-  "min_mappable_modules": 2,
-  "use_cache": true
-}
-```
+### Search Response
 
-**Response** (200 OK):
 ```json
 {
   "status": "success",
-  "message": "Found 25 universities matching criteria",
-  "execution_time_seconds": 1.2,
-  "cache_used": true,
-  "cache_timestamp": "2025-12-25T10:30:00",
-  "results_count": 25,
+  "message": "Found 72 universities matching criteria",
+  "execution_time_seconds": 0.012,
+  "database_timestamp": "2025-12-27T22:43:23",
+  "results_count": 72,
   "results": [
     {
       "rank": 1,
-      "name": "University of Melbourne",
-      "country": "Australia",
-      "university_code": "AU-MELB",
-      "sem1_spots": 3,
-      "min_cgpa": 3.7,
-      "mappable_count": 4,
-      "coverage_score": 66.7,
+      "name": "Technical University Of Denmark",
+      "country": "Denmark",
+      "university_code": "Denmark_Technical University Of Denmark",
+      "sem1_spots": 16,
+      "sem2_spots": 13,
+      "min_cgpa": 3.5,
+      "mappable_count": 2,
+      "coverage_score": 100.0,
       "mappable_modules": {
         "SC4001": [
           {
             "ntu_module": "SC4001",
-            "ntu_module_name": "Neural Networks & Deep Learning",
-            "partner_module_code": "COMP30027",
-            "partner_module_name": "Machine Learning",
-            "academic_units": "6",
+            "ntu_module_name": "NEURAL NETWORK & DEEP LEARNING",
+            "partner_module_code": "02456",
+            "partner_module_name": "Deep Learning",
+            "academic_units": "3",
             "status": "Approved",
-            "approval_year": "2024",
+            "approval_year": "2025",
             "semester": "1"
           }
         ]
       },
-      "unmappable_modules": ["SC4062"],
-      "remarks": ""
+      "unmappable_modules": [],
+      "remarks": "DTU requires students to have finished..."
     }
   ]
 }
 ```
 
-**Performance**:
-- **First search** (cold cache): 15-25 minutes
-  - Scrapes live data from NTU
-  - Caches for future use
-- **Subsequent searches** (warm cache): 1-2 seconds
-  - Loads from cache
-  - Cache TTL: 30 days
+## Database Stats
 
-#### 3. Clear All Caches
-```bash
-POST /api/cache/clear
-```
+Current database contains:
+- **34** countries
+- **509** universities
+- **24,619** module mappings
+- **1,588** unique NTU modules
 
-**Response**:
-```json
-{
-  "status": "success",
-  "message": "Cleared 5 cache items",
-  "cleared_items": [
-    "universities.json",
-    "mappings/abc123.json"
-  ]
-}
-```
+Last scraped: December 2025
 
-#### 4. Clear University Cache
-```bash
-POST /api/cache/clear/universities
-```
+## Performance
 
-#### 5. Clear Mapping Caches
-```bash
-POST /api/cache/clear/mappings
-```
+| Operation | Time |
+|-----------|------|
+| Database search | <100ms |
+| Health check | <10ms |
+| Cold start (after sleep) | ~30s |
 
-## Example Usage
+## Local Development
 
-### Using cURL
+### Start the Server
 
 ```bash
-# Health check
-curl http://localhost:8000/
+# Install dependencies
+pip install -r requirements.txt
 
-# Search universities
-curl -X POST http://localhost:8000/api/search \
-  -H "Content-Type: application/json" \
-  -d '{
-    "credentials": {
-      "username": "YOUR_USERNAME",
-      "password": "YOUR_PASSWORD",
-      "domain": "Student"
-    },
-    "target_countries": ["Australia", "Denmark"],
-    "target_modules": ["SC4001", "SC4002"],
-    "min_mappable_modules": 2,
-    "use_cache": true
-  }'
-
-# Clear cache
-curl -X POST http://localhost:8000/api/cache/clear
+# Run server
+python run_api.py
+# Server starts on http://localhost:8000
 ```
 
-### Using Python
+### API Documentation
 
-```python
-import requests
+- Swagger UI: http://localhost:8000/docs
+- ReDoc: http://localhost:8000/redoc
 
-# Search universities
-response = requests.post(
-    "http://localhost:8000/api/search",
-    json={
-        "credentials": {
-            "username": "YOUR_USERNAME",
-            "password": "YOUR_PASSWORD",
-            "domain": "Student"
-        },
-        "target_countries": ["Australia", "Denmark"],
-        "target_modules": ["SC4001", "SC4002"],
-        "min_mappable_modules": 2,
-        "use_cache": True
-    }
-)
+## Architecture
 
-data = response.json()
-print(f"Found {data['results_count']} universities")
-for uni in data['results'][:5]:
-    print(f"{uni['rank']}. {uni['name']} - {uni['mappable_count']} modules")
+```
+FastAPI Application
+├── /api/search/db          → DatabaseManager.get_mappings_by_modules()
+├── /api/admin/database/*   → DatabaseManager statistics
+└── backend/services/
+    ├── database.py         → SQLite operations
+    └── pdf_service.py      → PDF data enrichment (spots, CGPA)
 ```
 
-### Using the Test Script
+## File Structure
 
-```bash
-python test_api.py
 ```
-
-This runs automated tests for all endpoints.
-
-## Caching Strategy
-
-### Cache Types
-
-1. **University List (PDF data)**
-   - File: `data/cache/universities.json`
-   - TTL: **365 days** (changes yearly)
-   - Invalidated by: Config change or manual clear
-   - Size: ~100-500 KB
-
-2. **Module Mappings**
-   - Files: `data/cache/mappings/{hash}.json`
-   - TTL: **30 days** (can change periodically)
-   - Cache key: SHA256(countries + modules + username)
-   - Invalidated by: TTL expiry or manual clear
-   - Size: ~50-200 KB per cache file
-
-### Cache Behavior
-
-**First Search (Cold Cache)**:
+backend/
+├── api/
+│   ├── main.py         # FastAPI app + endpoints
+│   ├── models.py       # Pydantic request/response models
+│   └── admin.py        # Admin router
+└── services/
+    ├── database.py     # SQLite database manager
+    ├── pdf_service.py  # PDF data for spots/CGPA
+    ├── cache_manager.py
+    └── recommendation_engine.py
 ```
-Request → Extract PDF → Login to NTU → Scrape Mappings → Save Cache → Return
-Time: 15-25 minutes
-```
-
-**Subsequent Search (Warm Cache)**:
-```
-Request → Load Cache → Return
-Time: 1-2 seconds
-```
-
-### Cache Management
-
-**View Cache**:
-```bash
-ls -lh data/cache/
-ls -lh data/cache/mappings/
-```
-
-**Clear Cache** (via API):
-```bash
-curl -X POST http://localhost:8000/api/cache/clear
-```
-
-**Clear Cache** (manually):
-```bash
-rm -rf data/cache/*
-```
-
-## Configuration
-
-The API uses the same `config/config.yaml` as the CLI:
-
-```yaml
-target_countries:
-  - Australia
-  - Denmark
-  - Finland
-  # ... more countries
-
-target_modules:
-  - SC4001
-  - SC4002
-  # ... more modules
-
-student_college: CCDS
-min_mappable_modules: 2
-```
-
-**Request Parameters Override Config**:
-- If you provide `target_countries` in the request, it overrides config
-- If you omit it, config defaults are used
 
 ## Error Handling
 
 ### HTTP Status Codes
 
-- `200 OK` - Successful request
-- `401 Unauthorized` - Invalid NTU credentials
-- `404 Not Found` - PDF file missing
-- `422 Unprocessable Entity` - Invalid request parameters
-- `500 Internal Server Error` - Unexpected error
+| Code | Meaning |
+|------|---------|
+| 200 | Success |
+| 400 | Bad request (e.g., database empty) |
+| 422 | Validation error |
+| 500 | Internal server error |
 
-### Error Response Format
+### Error Response
 
 ```json
 {
   "status": "error",
-  "error": "Authentication failed: Login failed - check credentials",
+  "error": "Database is empty. Please run /api/admin/scrape first.",
   "details": null
 }
 ```
 
-### Common Errors
+## CORS Configuration
 
-**1. Invalid Credentials**
-```json
-{
-  "status": "error",
-  "error": "Authentication failed: Login failed - check credentials"
-}
-```
-**Solution**: Verify username, password, and domain are correct.
+Allowed origins:
+- `http://localhost:5173` (local development)
+- `https://exchange-finder-static.onrender.com` (production)
 
-**2. PDF Not Found**
-```json
-{
-  "status": "error",
-  "error": "PDF file not found: 210125_GEM_Explorer_Vacancy_List_for_AY2526_Full_Year_Recruitment.pdf"
-}
-```
-**Solution**: Ensure the PDF file is in the project directory.
+## Deployment
 
-**3. Browser Startup Failed**
-```json
-{
-  "status": "error",
-  "error": "Failed to start Chrome browser"
-}
-```
-**Solution**: Ensure Chrome is installed and webdriver-manager can access it.
+Deployed on Render.com as a Web Service.
 
-## Security
-
-### Credentials
-
-- ✅ **Not stored server-side**: Credentials only exist in memory during request
-- ✅ **Not logged**: Credentials are never written to logs
-- ✅ **HTTPS recommended**: Use HTTPS in production to encrypt credentials in transit
-
-### Best Practices for Production
-
-1. **Enable HTTPS/TLS**
-   ```python
-   uvicorn.run(..., ssl_keyfile="key.pem", ssl_certfile="cert.pem")
-   ```
-
-2. **Restrict CORS origins**
-   ```python
-   allow_origins=["https://yourdomain.com"]  # Not "*"
-   ```
-
-3. **Add rate limiting**
-   ```python
-   # Limit to 1 request per 15 minutes per user
-   ```
-
-4. **Add authentication**
-   ```python
-   # Require API key or JWT for access
-   ```
-
-5. **Set request timeout**
-   ```python
-   # 25 minute max timeout for searches
-   ```
-
-## CLI Compatibility
-
-The original CLI (`main.py`) continues to work unchanged:
-
+**Build Command:**
 ```bash
-# CLI still works
-python main.py
-
-# API also works
-python run_api.py
-```
-
-Both use the same scrapers and processors, just with different interfaces.
-
-## File Structure
-
-```
-Exchange_Scraper/
-├── backend/                     # NEW - API layer
-│   ├── api/
-│   │   ├── main.py             # FastAPI app
-│   │   └── models.py           # Pydantic models
-│   └── services/
-│       ├── cache_manager.py    # Caching logic
-│       └── recommendation_engine.py  # Pipeline orchestrator
-├── data/cache/                  # NEW - Cache storage
-│   ├── universities.json       # 365-day cache
-│   └── mappings/               # 30-day caches
-├── scrapers/                    # UNCHANGED - existing scrapers
-├── processors/                  # UNCHANGED - existing processors
-├── utils/                       # UNCHANGED - existing utilities
-├── config/                      # UNCHANGED - existing config
-├── run_api.py                   # NEW - Server launcher
-├── test_api.py                  # NEW - Test script
-├── main.py                      # UNCHANGED - CLI still works
-└── requirements.txt             # UPDATED - Added FastAPI deps
-```
-
-## Troubleshooting
-
-### Server won't start
-
-```bash
-# Check if port 8000 is already in use
-lsof -i :8000
-
-# Kill existing process
-kill -9 <PID>
-
-# Or use a different port
-uvicorn backend.api.main:app --port 8001
-```
-
-### Import errors
-
-```bash
-# Verify all dependencies installed
 pip install -r requirements.txt
-
-# Check Python version (requires 3.7+)
-python --version
 ```
 
-### Cache not working
-
+**Start Command:**
 ```bash
-# Check cache directory exists
-ls -la data/cache/
-
-# Check cache files
-ls -la data/cache/mappings/
-
-# Clear and rebuild cache
-curl -X POST http://localhost:8000/api/cache/clear
+uvicorn backend.api.main:app --host 0.0.0.0 --port $PORT
 ```
 
-### Search takes too long
+## Legacy Endpoints
 
-- **First search**: 15-25 minutes is normal (live scraping)
-- **Subsequent searches**: Should be 1-2 seconds (from cache)
-- If always slow, check cache is enabled: `"use_cache": true`
+These endpoints require NTU credentials and are used for live scraping:
 
-## Development
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/login` | Verify NTU credentials |
+| POST | `/api/search` | Live scraping search (slow) |
+| POST | `/api/admin/scrape` | Trigger full database scrape |
 
-### Running in development mode
-
-```bash
-# Auto-reload on code changes
-python run_api.py
-```
-
-### Running in production mode
-
-```bash
-uvicorn backend.api.main:app --host 0.0.0.0 --port 8000 --workers 4
-```
-
-### Logs
-
-Server logs are printed to stdout. For production, redirect to file:
-
-```bash
-uvicorn backend.api.main:app 2>&1 | tee api.log
-```
-
-## Performance
-
-**Benchmarks** (on MacBook Pro M1):
-
-| Operation | Time | Notes |
-|-----------|------|-------|
-| Health check | <10ms | Instant |
-| Search (cold cache) | 15-25 min | Full scrape |
-| Search (warm cache) | 1-2 sec | From cache |
-| Cache clear | <100ms | Delete files |
-| Startup | 2-3 sec | Initialize engine |
-
-**Resource Usage**:
-- Memory: ~500MB (during scraping with browser)
-- CPU: Low (mostly I/O bound)
-- Disk: ~1-5MB for caches
-
-## License
-
-Same as the original CLI scraper - for personal educational use.
-
-## Support
-
-For issues or questions:
-1. Check this README
-2. Check API docs: http://localhost:8000/docs
-3. Check the plan file: `.claude/plans/happy-seeking-comet.md`
-4. Review server logs
-
-## Acknowledgments
-
-Built on top of the existing NTU Exchange Scraper CLI, wrapping it with a FastAPI web layer for improved usability and performance through intelligent caching.
+These are primarily for updating the database and not needed for public use.
