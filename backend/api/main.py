@@ -77,7 +77,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "http://localhost:5173",  # Vite dev server
-        "https://exchange-finder.onrender.com",  # Production frontend
+        "https://exchange-finder-static.onrender.com",  # Production frontend
     ],
     allow_credentials=True,
     allow_methods=["*"],
