@@ -10,7 +10,7 @@ import { DEFAULT_MIN_MAPPABLE_MODULES } from '../utils/constants';
 import ModuleSelector from './ModuleSelector';
 import UniversityCard from './UniversityCard';
 
-const Search = ({ credentials }) => {
+const Search = () => {
   // Form state
   const [selectedCountries, setSelectedCountries] = useState([]);
   const [selectedModules, setSelectedModules] = useState([]);

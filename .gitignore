@@ -8,7 +8,7 @@ test_outputs/
 
 # Runtime and cache files
 checkpoint.json
-data/
+data/cache/
 
 # Python
 __pycache__/
