@@ -27,6 +27,24 @@ class PDFDataService:
     _pdf_data: Dict = None
     _pdf_df = None
 
+    # Country name aliases for matching
+    COUNTRY_ALIASES = {
+        'uk': 'united kingdom',
+        'united kingdom': 'uk',
+        'usa': 'united states',
+        'united states': 'usa',
+        'united states of america': 'usa',
+        'turkiye': 'turkey',
+        'turkey': 'turkiye',
+        'south korea': 'korea',
+        'korea': 'south korea',
+        'republic of korea': 'korea',
+        'czech republic': 'czechia',
+        'czechia': 'czech republic',
+        'hong kong sar': 'hong kong',
+        'hong kong': 'hong kong sar',
+    }
+
     def __new__(cls):
         """Singleton pattern to cache PDF data."""
         if cls._instance is None:
@@ -144,6 +162,14 @@ class PDFDataService:
             'remarks': ''
         }
 
+    def _normalize_country(self, country: str) -> set:
+        """Get all possible country name variants for matching."""
+        country_lower = country.lower()
+        variants = {country_lower}
+        if country_lower in self.COUNTRY_ALIASES:
+            variants.add(self.COUNTRY_ALIASES[country_lower])
+        return variants
+
     def _fuzzy_match(self, university_name: str, country: str) -> Optional[Dict]:
         """
         Try to find a fuzzy match for the university.
@@ -154,7 +180,7 @@ class PDFDataService:
             return None
 
         uni_lower = university_name.lower()
-        country_lower = country.lower()
+        country_variants = self._normalize_country(country) if country else set()
 
         # Extract key words from the university name
         keywords = [w for w in uni_lower.split() if len(w) > 3]
@@ -163,9 +189,11 @@ class PDFDataService:
         best_match = None
 
         for key, data in self._name_to_data.items():
-            # Skip if wrong country
-            if country_lower and country_lower not in key:
-                continue
+            # Check country match using aliases
+            if country_variants:
+                country_match = any(variant in key for variant in country_variants)
+                if not country_match:
+                    continue
 
             score = 0
             stored_name = data.get('university_name', '').lower()
