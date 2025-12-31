@@ -84,13 +84,17 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Initialize recommendation engine
-try:
-    engine = RecommendationEngine()
-    print("✓ Recommendation engine initialized successfully")
-except Exception as e:
-    print(f"✗ Failed to initialize recommendation engine: {e}")
-    raise
+# Lazy initialization of recommendation engine (to speed up startup)
+_engine = None
+
+def get_engine():
+    """Get recommendation engine, initializing lazily on first use."""
+    global _engine
+    if _engine is None:
+        print("Initializing recommendation engine...")
+        _engine = RecommendationEngine()
+        print("✓ Recommendation engine initialized successfully")
+    return _engine
 
 # Initialize thread pool executor for running blocking operations
 executor = ThreadPoolExecutor(max_workers=4)
@@ -171,7 +175,7 @@ async def verify_login(request: LoginRequest):
             request.credentials.domain
         )
 
-        scraper = SeleniumNTUScraper(credentials, engine.config, headless=True)
+        scraper = SeleniumNTUScraper(credentials, get_engine().config, headless=True)
 
         try:
             # Start browser
@@ -192,12 +196,12 @@ async def verify_login(request: LoginRequest):
 
             # Login successful! Now fetch and cache countries in the same session
             # Check if already cached
-            cached = engine.cache_manager.get_countries_universities()
+            cached = get_engine().cache_manager.get_countries_universities()
             if not cached:
                 print("  Pre-fetching countries in login session...")
                 try:
                     countries_dict = scraper.scrape_countries_and_universities()
-                    engine.cache_manager.save_countries_universities(countries_dict)
+                    get_engine().cache_manager.save_countries_universities(countries_dict)
                     print(f"  ✓ Cached {len(countries_dict)} countries")
                 except Exception as e:
                     print(f"  Warning: Failed to pre-fetch countries: {e}")
@@ -432,7 +436,7 @@ async def search_universities(request: SearchRequest):
         )
 
         # Execute search via recommendation engine
-        ranked_results, cache_used, cache_timestamp = engine.search_universities(
+        ranked_results, cache_used, cache_timestamp = get_engine().search_universities(
             credentials=credentials,
             target_countries=request.target_countries,
             target_modules=request.target_modules,
@@ -515,7 +519,7 @@ async def search_universities(request: SearchRequest):
 async def clear_cache():
     """Clear all cached data to force fresh scraping."""
     try:
-        cleared_items = engine.cache_manager.clear_all()
+        cleared_items = get_engine().cache_manager.clear_all()
 
         return CacheClearResponse(
             status="success",
@@ -543,7 +547,7 @@ async def clear_cache():
 async def clear_university_cache():
     """Clear only the university list cache (PDF data)."""
     try:
-        cleared = engine.cache_manager.clear_universities()
+        cleared = get_engine().cache_manager.clear_universities()
         items = ["universities.json"] if cleared else []
 
         return CacheClearResponse(
@@ -573,7 +577,7 @@ async def clear_university_cache():
 async def clear_mapping_cache():
     """Clear only the module mapping caches."""
     try:
-        count = engine.cache_manager.clear_mappings()
+        count = get_engine().cache_manager.clear_mappings()
         items = [f"mappings/cache_{i}.json" for i in range(count)]
 
         return CacheClearResponse(
@@ -597,7 +601,7 @@ async def clear_mapping_cache():
 async def clear_countries_cache():
     """Clear only the countries/universities cache."""
     try:
-        cleared = engine.cache_manager.clear_countries_universities()
+        cleared = get_engine().cache_manager.clear_countries_universities()
         items = ["countries_universities.json"] if cleared else []
 
         return CacheClearResponse(
@@ -651,7 +655,7 @@ async def get_countries_universities(request: CountriesUniversitiesRequest):
     try:
         # Try cache first
         if request.use_cache:
-            cached = engine.cache_manager.get_countries_universities()
+            cached = get_engine().cache_manager.get_countries_universities()
             if cached:
                 countries_dict, cache_time = cached
 
@@ -681,7 +685,7 @@ async def get_countries_universities(request: CountriesUniversitiesRequest):
             request.credentials.domain
         )
 
-        scraper = SeleniumNTUScraper(credentials, engine.config, headless=True)
+        scraper = SeleniumNTUScraper(credentials, get_engine().config, headless=True)
 
         try:
             # Start browser and login
@@ -696,7 +700,7 @@ async def get_countries_universities(request: CountriesUniversitiesRequest):
 
             # Save to cache
             if request.use_cache:
-                engine.cache_manager.save_countries_universities(countries_dict)
+                get_engine().cache_manager.save_countries_universities(countries_dict)
 
             # Transform to response format
             countries_list = []
@@ -807,7 +811,7 @@ async def websocket_search_endpoint(websocket: WebSocket):
 
         ranked_results, cache_used, cache_timestamp = await loop.run_in_executor(
             executor,
-            lambda: engine.search_universities_with_progress(
+            lambda: get_engine().search_universities_with_progress(
                 credentials=credentials,
                 target_countries=search_request.target_countries,
                 target_modules=search_request.target_modules,
