@@ -131,34 +131,45 @@ const UniversityCard = ({ university, selectedSemester = null }) => {
               </h4>
               <div className="space-y-3">
                 {Object.entries(university.mappable_modules).map(
-                  ([ntuModule, mappings]) => (
-                    <div
-                      key={ntuModule}
-                      className="border border-green-200 rounded-lg p-3 bg-green-50"
-                    >
-                      <div className="font-semibold text-green-800 mb-2">
-                        {ntuModule}
-                      </div>
-                      <div className="space-y-2">
-                        {mappings.map((mapping, idx) => (
-                          <div
-                            key={idx}
-                            className="text-sm bg-white rounded p-2 border border-green-100"
-                          >
-                            <div className="font-medium text-gray-800">
-                              {mapping.partner_module_code} -{' '}
-                              {mapping.partner_module_name}
+                  ([ntuModule, mappings]) => {
+                    // Deduplicate by partner_module_code, keeping the most recent approval year
+                    const uniqueMappings = new Map();
+                    mappings.forEach((mapping) => {
+                      const code = mapping.partner_module_code || '';
+                      const existing = uniqueMappings.get(code);
+                      if (!existing || (mapping.approval_year || '') > (existing.approval_year || '')) {
+                        uniqueMappings.set(code, mapping);
+                      }
+                    });
+                    const deduplicatedMappings = Array.from(uniqueMappings.values());
+
+                    return (
+                      <div
+                        key={ntuModule}
+                        className="border border-green-200 rounded-lg p-3 bg-green-50"
+                      >
+                        <div className="font-semibold text-green-800 mb-2">
+                          {ntuModule}
+                        </div>
+                        <div className="space-y-2">
+                          {deduplicatedMappings.map((mapping, idx) => (
+                            <div
+                              key={idx}
+                              className="text-sm bg-white rounded p-2 border border-green-100"
+                            >
+                              <div className="font-medium text-gray-800">
+                                {mapping.partner_module_code} -{' '}
+                                {mapping.partner_module_name}
+                              </div>
+                              <div className="text-xs text-gray-600 mt-1">
+                                {mapping.academic_units} AU • {mapping.status} • Approved {mapping.approval_year}
+                              </div>
                             </div>
-                            <div className="text-xs text-gray-600 mt-1">
-                              {mapping.academic_units} AU • Semester{' '}
-                              {mapping.semester} • {mapping.status} (
-                              {mapping.approval_year})
-                            </div>
-                          </div>
-                        ))}
+                          ))}
+                        </div>
                       </div>
-                    </div>
-                  )
+                    );
+                  }
                 )}
               </div>
             </div>

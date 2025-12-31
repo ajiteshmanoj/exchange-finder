@@ -4,7 +4,7 @@
  */
 
 import jsPDF from 'jspdf';
-import 'jspdf-autotable';
+import autoTable from 'jspdf-autotable';
 
 /**
  * Generate PDF from search results
@@ -131,7 +131,7 @@ export const generateSearchResultsPDF = (results, selectedModules, options = {})
     `${uni.coverage_score.toFixed(0)}%`,
   ]);
 
-  doc.autoTable({
+  autoTable(doc, {
     startY: yPosition,
     head: [['Rank', 'University', 'Country', 'Mapped', 'Coverage']],
     body: summaryData,
@@ -209,10 +209,21 @@ export const generateSearchResultsPDF = (results, selectedModules, options = {})
       doc.text('Mappable Modules', margin + 5, yPosition);
       yPosition += 5;
 
-      // Create table data for mappable modules
+      // Create table data for mappable modules (deduplicated by partner_module_code)
       const mappingTableData = [];
       Object.entries(university.mappable_modules).forEach(([ntuCode, mappings]) => {
-        mappings.forEach((mapping, idx) => {
+        // Deduplicate by partner_module_code, keeping the most recent approval year
+        const uniqueMappings = new Map();
+        mappings.forEach((mapping) => {
+          const code = mapping.partner_module_code || '';
+          const existing = uniqueMappings.get(code);
+          if (!existing || (mapping.approval_year || '') > (existing.approval_year || '')) {
+            uniqueMappings.set(code, mapping);
+          }
+        });
+
+        // Convert to array and add to table
+        Array.from(uniqueMappings.values()).forEach((mapping, idx) => {
           mappingTableData.push([
             idx === 0 ? ntuCode : '',
             mapping.partner_module_code || '',
@@ -222,15 +233,15 @@ export const generateSearchResultsPDF = (results, selectedModules, options = {})
                 : mapping.partner_module_name)
               : '',
             mapping.academic_units || '',
-            `S${mapping.semester || '?'}`,
+            mapping.approval_year || '-',
             mapping.status || '',
           ]);
         });
       });
 
-      doc.autoTable({
+      autoTable(doc, {
         startY: yPosition,
-        head: [['NTU Module', 'Partner Code', 'Partner Module Name', 'AU', 'Sem', 'Status']],
+        head: [['NTU Module', 'Partner Code', 'Partner Module Name', 'AU', 'Year', 'Status']],
         body: mappingTableData,
         theme: 'grid',
         headStyles: {
@@ -244,7 +255,7 @@ export const generateSearchResultsPDF = (results, selectedModules, options = {})
           1: { cellWidth: 25 },
           2: { cellWidth: 68 },
           3: { cellWidth: 12 },
-          4: { cellWidth: 12 },
+          4: { cellWidth: 18 },
           5: { cellWidth: 20 },
         },
         margin: { left: margin, right: margin },
@@ -272,15 +283,14 @@ export const generateSearchResultsPDF = (results, selectedModules, options = {})
 
     // Remarks
     if (university.remarks) {
-      checkNewPage(15);
+      checkNewPage(20);
       doc.setFontSize(8);
       doc.setTextColor(100);
       doc.setFont('helvetica', 'italic');
-      const remarksText = university.remarks.length > 100
-        ? university.remarks.substring(0, 100) + '...'
-        : university.remarks;
-      doc.text(`Remarks: ${remarksText}`, margin + 5, yPosition);
-      yPosition += 6;
+      const maxWidth = pageWidth - 2 * margin - 10;
+      const remarksLines = doc.splitTextToSize(`Remarks: ${university.remarks}`, maxWidth);
+      doc.text(remarksLines, margin + 5, yPosition);
+      yPosition += remarksLines.length * 4;
     }
 
     // Spacing between universities
