@@ -61,34 +61,56 @@ class PDFExtractor:
         """
         Parse a single row from the PDF table.
 
-        Expected columns:
+        Expected columns (AY 26/27 format - 14 columns):
         0: Continent
         1: Country/Region
-        2: University Code
-        3: University Sub Code
-        4: University Name
-        5: Status
-        6: For (colleges)
-        7: Full Year spots
-        8: Sem 1 spots
-        9: Sem 2 spots
-        10: Min CGPA
-        11: Remarks
+        2: City/State
+        3: University Code
+        4: University Sub Code
+        5: University Name
+        6: Status
+        7: For (colleges)
+        8: NUS/SMU Partner?
+        9: Full Year spots
+        10: Sem 1 spots
+        11: Sem 2 spots
+        12: Min CGPA
+        13: Remarks
         """
         try:
-            # Clean and extract values
-            continent = str(row[0] or "").strip()
-            country = str(row[1] or "").strip()
-            university_code = str(row[2] or "").strip()
-            university_sub_code = str(row[3] or "").strip()
-            university_name = str(row[4] or "").strip()
-            status = str(row[5] or "").strip()
-            status_for = str(row[6] or "").strip()
-            full_year_spots = self._parse_number(row[7])
-            sem1_spots = self._parse_number(row[8])
-            sem2_spots = self._parse_number(row[9])
-            min_cgpa = self._parse_float(row[10])
-            remarks = str(row[11] or "").strip() if len(row) > 11 else ""
+            # Handle both old (12 column) and new (14 column) PDF formats
+            if len(row) >= 14:
+                # New AY 26/27 format (14 columns)
+                continent = str(row[0] or "").strip()
+                country = str(row[1] or "").strip()
+                # city_state = str(row[2] or "").strip()  # Not used currently
+                university_code = str(row[3] or "").strip()
+                university_sub_code = str(row[4] or "").strip()
+                university_name = str(row[5] or "").strip()
+                status = str(row[6] or "").strip()
+                status_for = str(row[7] or "").strip()
+                # nus_smu_partner = str(row[8] or "").strip()  # Not used currently
+                full_year_spots = self._parse_number(row[9])
+                sem1_spots = self._parse_number(row[10])
+                sem2_spots = self._parse_number(row[11])
+                min_cgpa = self._parse_float(row[12])
+                remarks = str(row[13] or "").strip() if len(row) > 13 else ""
+            elif len(row) >= 12:
+                # Old AY 25/26 format (12 columns)
+                continent = str(row[0] or "").strip()
+                country = str(row[1] or "").strip()
+                university_code = str(row[2] or "").strip()
+                university_sub_code = str(row[3] or "").strip()
+                university_name = str(row[4] or "").strip()
+                status = str(row[5] or "").strip()
+                status_for = str(row[6] or "").strip()
+                full_year_spots = self._parse_number(row[7])
+                sem1_spots = self._parse_number(row[8])
+                sem2_spots = self._parse_number(row[9])
+                min_cgpa = self._parse_float(row[10])
+                remarks = str(row[11] or "").strip() if len(row) > 11 else ""
+            else:
+                return None
 
             # Skip if university name is empty or looks like a header
             if not university_name or university_name in ["University", "University Name"]:
@@ -231,7 +253,7 @@ if __name__ == "__main__":
     with open('config/config.yaml', 'r') as f:
         config = yaml.safe_load(f)
 
-    pdf_path = "210125_GEM_Explorer_Vacancy_List_for_AY2526_Full_Year_Recruitment.pdf"
+    pdf_path = "GEM_Explorer_Vacancy_List_for_AY2627_Full_Year_Recruitment_Round.pdf"
     universities = extract_and_filter_universities(pdf_path, config)
 
     print(f"\nTotal universities found: {len(universities)}")

@@ -19,7 +19,7 @@ target_modules:
 
 student_college: CCDS
 min_mappable_modules: 2
-semester_column: "AY 25/26 GEM EX SEM 1"
+semester_column: "AY 26/27 GEM EX SEM 1"
 
 # Rate limiting for web scraping (seconds)
 rate_limiting:
@@ -33,7 +33,7 @@ ntu_sso:
   student_id: "U2422324K"  # Your matriculation number (different from network username)
 
 # PDF file path (relative to project root)
-pdf_file: "210125_GEM_Explorer_Vacancy_List_for_AY2526_Full_Year_Recruitment.pdf"
+pdf_file: "GEM_Explorer_Vacancy_List_for_AY2627_Full_Year_Recruitment_Round.pdf"
 
 # Output paths
 outputs:
@@ -44,3 +44,4 @@ outputs:
 approved_years:
   - "2024"
   - "2025"
+  - "2026"
